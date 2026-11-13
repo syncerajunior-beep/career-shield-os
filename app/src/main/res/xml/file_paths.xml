@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path
+        name="site_photos"
+        path="site_photos/" />
+    <cache-path
+        name="site_photo_cache"
+        path="site_photos/" />
+</paths>

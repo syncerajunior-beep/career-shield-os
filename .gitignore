@@ -1,0 +1,33 @@
+*.iml
+.gradle
+.kotlin
+/local.properties
+local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/.build-outputs
+/captures
+.externalNativeBuild
+.cxx
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+secrets.properties
+
+# Keystores & Signing Secrets
+*.jks
+*.keystore
+debug.keystore
+debug.keystore.base64
+
+# Firebase Config Files (supply locally from Firebase Console; keep out of public repos)
+google-services.json
+firebase_applet_config.xml

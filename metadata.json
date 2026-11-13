@@ -1,0 +1,6 @@
+{
+  "name": "Career Shield",
+  "description": "ระบบปฏิบัติการคุมงานก่อสร้างบน Android (Room DB + Firebase AI Logic Hybrid Inference: Gemini Nano 4 ออฟไลน์ + Cloud Gemini Fallback)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

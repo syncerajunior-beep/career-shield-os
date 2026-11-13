@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">Career Shield</string>
+    <string name="header_title">CAREER SHIELD OS</string>
+    <string name="header_subtitle">Hybrid AI (Gemini Nano 4 + Cloud Fallback) • Room DB</string>
+    <string name="tab_checklist">เช็กลิสต์</string>
+    <string name="tab_sos_scripts">สคริปต์ SOS</string>
+    <string name="tab_contract_scanner">สแกน LD &amp; รูป</string>
+    <string name="tab_ai_shield">Hybrid AI</string>
+    <string name="red_flags_title">⚠️ 3 จุดตายคอขาดบาดตาย</string>
+    <string name="red_flag_1">1. ผู้รับเหมาส่งสัญญาณทิ้งงาน (คนลดลง)</string>
+    <string name="red_flag_2">2. คำสั่งแก้งานปากเปล่า (ห้ามทำถ้าไม่มีลายเซ็น)</string>
+    <string name="red_flag_3">3. ค่าปรับ LD วันละ 1.5 แสน (ต้องยิงหนังสือ EOT)</string>
+    <string name="daily_checkpoints_title">ภารกิจประจำวัน (Daily Action Checkpoints)</string>
+    <string name="sos_scripts_title">ปุ่มลัดก๊อปปี้สคริปต์เอาตัวรอด (SOS Scripts)</string>
+    <string name="btn_copy">คัดลอก</string>
+    <string name="btn_share">แชร์ด่วน</string>
+    <string name="toast_copied">คัดลอกข้อความสำเร็จ!</string>
+    <string name="add_task_button">เพิ่มงานใหม่</string>
+    <string name="add_script_button">เพิ่มสคริปต์</string>
+    <string name="reset_day_button">เริ่มวันใหม่</string>
+    <string name="contract_scanner_title">LD &amp; Site Photo Scanner (Cloud Gemini Multimodal)</string>
+    <string name="contract_scanner_subtitle">สแกนความเสี่ยงข้อสัญญาก่อสร้าง ค่าปรับ LD และตรวจวิเคราะห์ภาพถ่ายจุดเสี่ยงหน้างานผ่าน Cloud Gemini</string>
+    <string name="ai_thinking_title">ที่ปรึกษาอาวุโส Hybrid AI (Gemini Nano 4 + Cloud Gemini)</string>
+    <string name="ai_thinking_subtitle">รันออฟไลน์บนเครื่องด้วย Gemini Nano 4 (PREFER_ON_DEVICE) พร้อมสลับใช้ Cloud Gemini 3.8 Flash / 4 Carbon / 3.8 Live อัตโนมัติ</string>
+    <string name="offline_mode_label">Offline Site Mode</string>
+</resources>
