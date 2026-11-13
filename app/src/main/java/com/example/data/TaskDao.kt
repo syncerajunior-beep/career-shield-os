@@ -60,4 +60,14 @@ interface TaskDao {
 
     @Delete
     suspend fun deleteScript(script: ScriptEntity)
+
+    // คำสั่งสำหรับ Exception Audit Log (หลักฐานอนุมัติข้อยกเว้น แยกจาก Certified Baseline)
+    @Query("SELECT * FROM exception_audit_logs ORDER BY timestamp DESC, id DESC")
+    fun getAllExceptionAudits(): Flow<List<ExceptionAuditEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertExceptionAudit(audit: ExceptionAuditEntity)
+
+    @Delete
+    suspend fun deleteExceptionAudit(audit: ExceptionAuditEntity)
 }

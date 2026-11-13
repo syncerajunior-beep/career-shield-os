@@ -34,20 +34,26 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.FactCheck
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AddTask
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SaveAlt
@@ -73,6 +79,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -85,6 +92,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.R
+import com.example.data.CertifiedBaselineData
+import com.example.data.ExceptionAuditEntity
+import com.example.data.NanoDiagnosticLanguage
 import com.example.ui.components.InferenceSourcePill
 import com.example.viewmodel.AiGeneratorUiState
 import com.example.viewmodel.AiThinkingUiState
@@ -93,7 +103,12 @@ import com.example.viewmodel.GeneratedActionPack
 import com.example.viewmodel.HybridInferenceSource
 import com.example.viewmodel.HybridOpsUiState
 import com.example.viewmodel.LiveVoiceUiState
+import com.example.viewmodel.MaterialSanityCheckUiState
+import com.example.viewmodel.NanoDiagnosticUiState
 import com.example.viewmodel.SiteSafetyRiskUiState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -108,6 +123,11 @@ fun AiAdvisorScreen(
     offlineSiteTestMode: Boolean,
     onDeviceStatusLabel: String,
     isOnDeviceDownloadable: Boolean,
+    verifiedOnDeviceModelName: String?,
+    deviceCompatibilitySummary: String,
+    nanoDiagnosticState: NanoDiagnosticUiState,
+    materialSanityCheckState: MaterialSanityCheckUiState,
+    exceptionAudits: List<ExceptionAuditEntity>,
     hybridOpsState: HybridOpsUiState,
     siteSafetyRiskState: SiteSafetyRiskUiState,
     thinkingState: AiThinkingUiState,
@@ -118,6 +138,12 @@ fun AiAdvisorScreen(
     onDisableOfflineMode: () -> Unit,
     onRefreshOnDeviceStatus: () -> Unit,
     onDownloadOnDeviceModel: () -> Unit,
+    onRunNanoDiagnostic: (NanoDiagnosticLanguage) -> Unit,
+    onClearNanoDiagnostic: () -> Unit,
+    onRunMaterialSanityCheck: (String, String) -> Unit,
+    onClearMaterialSanityCheck: () -> Unit,
+    onRecordExceptionAudit: (String, String, String, String, String, String, String) -> Unit,
+    onDeleteExceptionAudit: (ExceptionAuditEntity) -> Unit,
     onSummarizeDailyLog: () -> Unit,
     onDetectDuplicateProgress: () -> Unit,
     onAskHybridSiteQa: (String) -> Unit,
@@ -131,10 +157,15 @@ fun AiAdvisorScreen(
     onClearChat: () -> Unit,
     onToggleLiveVoice: () -> Unit
 ) {
-    // 0 = Hybrid Ops (Gemini Nano 4 + Cloud Fallback), 1 = Chatbot, 2 = Live Voice, 3 = High Thinking & Pack
+    // 0 = Hybrid Ops (Preview Target + Cloud), 1 = Chatbot, 2 = Live Voice, 3 = High Thinking & Pack
     var activeSubTab by rememberSaveable { mutableIntStateOf(0) }
     var chatInput by rememberSaveable { mutableStateOf("") }
     var hybridQaInput by rememberSaveable { mutableStateOf("") }
+    var materialAreaInput by rememberSaveable { mutableStateOf("ชั้น 1 (พื้นที่ 60 ตร.ม.)") }
+    var materialRequestInput by rememberSaveable {
+        mutableStateOf("ขอเบิกกระเบื้อง 95 ตร.ม. และปูนกาว 40 ถุง สำหรับปูพื้นชั้น 1")
+    }
+    var exceptionJustificationInput by rememberSaveable { mutableStateOf("") }
     var safetyHazardInput by rememberSaveable {
         mutableStateOf("ช่างติดตั้งนั่งร้านชั้น 5 สูง 14 เมตร ไม่มีราวกันตกและคนงานไม่สวม Safety Harness")
     }
@@ -201,11 +232,11 @@ fun AiAdvisorScreen(
             FilterChip(
                 selected = activeSubTab == 0,
                 onClick = { activeSubTab = 0 },
-                label = { Text("Hybrid Ops (Nano 4)", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                label = { Text("Hybrid Ops (Preview)", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Memory,
-                        contentDescription = "Hybrid Ops Gemini Nano 4",
+                        contentDescription = "Hybrid Ops On-Device Preview",
                         modifier = Modifier.size(15.dp)
                     )
                 },
@@ -293,6 +324,23 @@ fun AiAdvisorScreen(
                 offlineSiteTestMode = offlineSiteTestMode,
                 onDeviceStatusLabel = onDeviceStatusLabel,
                 isOnDeviceDownloadable = isOnDeviceDownloadable,
+                verifiedOnDeviceModelName = verifiedOnDeviceModelName,
+                deviceCompatibilitySummary = deviceCompatibilitySummary,
+                nanoDiagnosticState = nanoDiagnosticState,
+                materialSanityCheckState = materialSanityCheckState,
+                exceptionAudits = exceptionAudits,
+                materialAreaInput = materialAreaInput,
+                onMaterialAreaInputChange = { materialAreaInput = it },
+                materialRequestInput = materialRequestInput,
+                onMaterialRequestInputChange = { materialRequestInput = it },
+                exceptionJustificationInput = exceptionJustificationInput,
+                onExceptionJustificationInputChange = { exceptionJustificationInput = it },
+                onRunMaterialSanityCheck = {
+                    onRunMaterialSanityCheck(materialAreaInput, materialRequestInput)
+                },
+                onClearMaterialSanityCheck = onClearMaterialSanityCheck,
+                onRecordExceptionAudit = onRecordExceptionAudit,
+                onDeleteExceptionAudit = onDeleteExceptionAudit,
                 hybridOpsState = hybridOpsState,
                 siteSafetyRiskState = siteSafetyRiskState,
                 safetyHazardInput = safetyHazardInput,
@@ -304,6 +352,8 @@ fun AiAdvisorScreen(
                 onQaInputChange = { hybridQaInput = it },
                 onRefreshStatus = onRefreshOnDeviceStatus,
                 onDownloadModel = onDownloadOnDeviceModel,
+                onRunNanoDiagnostic = onRunNanoDiagnostic,
+                onClearNanoDiagnostic = onClearNanoDiagnostic,
                 onSummarizeDailyLog = onSummarizeDailyLog,
                 onDetectDuplicateProgress = onDetectDuplicateProgress,
                 onAskHybridQa = {
@@ -368,6 +418,21 @@ private fun HybridOpsSubScreen(
     offlineSiteTestMode: Boolean,
     onDeviceStatusLabel: String,
     isOnDeviceDownloadable: Boolean,
+    verifiedOnDeviceModelName: String?,
+    deviceCompatibilitySummary: String,
+    nanoDiagnosticState: NanoDiagnosticUiState,
+    materialSanityCheckState: MaterialSanityCheckUiState,
+    exceptionAudits: List<ExceptionAuditEntity>,
+    materialAreaInput: String,
+    onMaterialAreaInputChange: (String) -> Unit,
+    materialRequestInput: String,
+    onMaterialRequestInputChange: (String) -> Unit,
+    exceptionJustificationInput: String,
+    onExceptionJustificationInputChange: (String) -> Unit,
+    onRunMaterialSanityCheck: () -> Unit,
+    onClearMaterialSanityCheck: () -> Unit,
+    onRecordExceptionAudit: (String, String, String, String, String, String, String) -> Unit,
+    onDeleteExceptionAudit: (ExceptionAuditEntity) -> Unit,
     hybridOpsState: HybridOpsUiState,
     siteSafetyRiskState: SiteSafetyRiskUiState,
     safetyHazardInput: String,
@@ -379,11 +444,14 @@ private fun HybridOpsSubScreen(
     onQaInputChange: (String) -> Unit,
     onRefreshStatus: () -> Unit,
     onDownloadModel: () -> Unit,
+    onRunNanoDiagnostic: (NanoDiagnosticLanguage) -> Unit,
+    onClearNanoDiagnostic: () -> Unit,
     onSummarizeDailyLog: () -> Unit,
     onDetectDuplicateProgress: () -> Unit,
     onAskHybridQa: () -> Unit,
     onDisableOfflineMode: () -> Unit
 ) {
+    val auditDateFormatter = remember { SimpleDateFormat("dd/MM HH:mm", Locale.US) }
     val safetyPresets = listOf(
         "บ่อขุดลึก 3.5 เมตร ไม่มีชีทไพล์กันดินพังช่วงฝนตก",
         "ตู้ไฟชั่วคราวหน้างานน้ำขัง ไม่มีสายดินและ ELCB",
@@ -397,7 +465,7 @@ private fun HybridOpsSubScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 1. AICore / Gemini Nano Hardware Status & Mode Card
+        // 1. AICore / OnDeviceModelOption.PREVIEW Hardware Status & Mode Card
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
@@ -418,7 +486,7 @@ private fun HybridOpsSubScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Memory,
-                                contentDescription = "สถานะ Gemini Nano 4 บนอุปกรณ์",
+                                contentDescription = "สถานะ AICore On-Device Preview",
                                 tint = Color(0xFF00E676),
                                 modifier = Modifier.size(22.dp)
                             )
@@ -432,9 +500,9 @@ private fun HybridOpsSubScreen(
                                 )
                                 Text(
                                     text = if (offlineSiteTestMode) {
-                                        "InferenceMode.ONLY_ON_DEVICE (Offline Site Test)"
+                                        "ONLY_ON_DEVICE • OnDeviceModelOption.PREVIEW"
                                     } else {
-                                        "InferenceMode.PREFER_ON_DEVICE -> Cloud Fallback"
+                                        "PREFER_ON_DEVICE (PREVIEW) -> Cloud gemini-3.8-flash"
                                     },
                                     fontSize = 11.sp,
                                     color = if (offlineSiteTestMode) Color(0xFFFFB300) else Color(0xFF00E676),
@@ -463,6 +531,14 @@ private fun HybridOpsSubScreen(
                         fontSize = 12.sp,
                         color = Color(0xFFD1D5DB)
                     )
+                    if (deviceCompatibilitySummary.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "อุปกรณ์: $deviceCompatibilitySummary • Model Name: ${verifiedOnDeviceModelName ?: "ยังไม่ยืนยันจาก AICore"}",
+                            fontSize = 10.sp,
+                            color = Color(0xFF9CA3AF)
+                        )
+                    }
 
                     if (isOnDeviceDownloadable) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -476,11 +552,206 @@ private fun HybridOpsSubScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Download,
-                                contentDescription = "ดาวน์โหลด Gemini Nano",
+                                contentDescription = "ดาวน์โหลดโมเดล On-Device Preview",
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("ดาวน์โหลด Gemini Nano ออฟไลน์", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("ดาวน์โหลดโมเดล On-Device Preview", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1.5 Dedicated Nano 4 Full Preview Diagnostic Card (ONLY_ON_DEVICE, NO Cloud Fallback)
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1324)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.5.dp, Color(0xFF00E5FF), RoundedCornerShape(12.dp))
+                    .testTag("nano4_diagnostic_card")
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Nano 4 Full Preview Diagnostic (ONLY_ON_DEVICE)",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF00E5FF)
+                            )
+                            Text(
+                                text = "Target: OnDeviceModelOption.PREVIEW (nano-v4-full / Gemma 4 E4B) • maxOutputTokens=256 • ไม่สลับไป Cloud",
+                                fontSize = 10.sp,
+                                color = Color(0xFF9CA3AF)
+                            )
+                        }
+                        if (nanoDiagnosticState !is NanoDiagnosticUiState.Idle) {
+                            IconButton(
+                                onClick = onClearNanoDiagnostic,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "ล้างผลทดสอบ Diagnostic",
+                                    tint = Color(0xFF9CA3AF),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "หมายเหตุเอกสาร Google: AICore Developer Preview รองรับอุปกรณ์และโปรแกรมที่ลงทะเบียน (EN/KO ได้รับการรับรองอย่างเป็นทางการ; ทดสอบ TH แยกเพื่อสังเกตผลจริง)",
+                        fontSize = 10.sp,
+                        color = Color(0xFFFFD54F),
+                        lineHeight = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { onRunNanoDiagnostic(NanoDiagnosticLanguage.ENGLISH) },
+                            enabled = nanoDiagnosticState !is NanoDiagnosticUiState.Running,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF00E5FF),
+                                contentColor = Color(0xFF030712)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("nano4_diagnostic_en_button")
+                        ) {
+                            Text(
+                                text = "Test EN (On-Device)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { onRunNanoDiagnostic(NanoDiagnosticLanguage.THAI) },
+                            enabled = nanoDiagnosticState !is NanoDiagnosticUiState.Running,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("nano4_diagnostic_th_button")
+                        ) {
+                            Text(
+                                text = "ทดสอบ TH (On-Device)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF00E5FF)
+                            )
+                        }
+                    }
+
+                    when (nanoDiagnosticState) {
+                        is NanoDiagnosticUiState.Idle -> Unit
+                        is NanoDiagnosticUiState.Running -> {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(
+                                    color = Color(0xFF00E5FF),
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "กำลังเรียก ONLY_ON_DEVICE (${nanoDiagnosticState.language.name})...",
+                                    fontSize = 11.sp,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                        is NanoDiagnosticUiState.Success -> {
+                            val res = nanoDiagnosticState.result
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                color = Color(0xFF0F172A),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(1.dp, Color(0xFF00E676), RoundedCornerShape(8.dp))
+                                    .testTag("nano4_diagnostic_result_card")
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    InferenceSourcePill(
+                                        source = nanoDiagnosticState.actualSource,
+                                        detailLabel = "Diagnostic (${res.language.name})",
+                                        verifiedModelName = res.detectedModelName
+                                    )
+                                    Text(
+                                        text = "Pre-call AICore: ${res.preCallStatus} | getModelName(): ${res.detectedModelName ?: "null"}",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFF9CA3AF)
+                                    )
+                                    Text(
+                                        text = "Prompt: ${res.prompt}",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFFD1D5DB)
+                                    )
+                                    Text(
+                                        text = res.responseText,
+                                        fontSize = 12.sp,
+                                        color = Color.White,
+                                        lineHeight = 17.sp
+                                    )
+                                }
+                            }
+                        }
+                        is NanoDiagnosticUiState.UnavailableOrError -> {
+                            val res = nanoDiagnosticState.result
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                color = Color(0xFF3B1219),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(1.dp, Color(0xFFFF5252), RoundedCornerShape(8.dp))
+                                    .testTag("nano4_diagnostic_error_card")
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = "❌ On-Device Diagnostic Unavailable (No Cloud Fallback)",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFF8A80)
+                                    )
+                                    Text(
+                                        text = "Device: ${res.deviceInfo}",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFFD1D5DB)
+                                    )
+                                    Text(
+                                        text = "Pre-call AICore: ${res.preCallStatus} | getModelName(): ${res.detectedModelName ?: "null"}",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFFD1D5DB)
+                                    )
+                                    Text(
+                                        text = "Exception: ${res.errorType ?: "Unknown"}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = res.errorMessage ?: "Unavailable",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFFFFCDD2),
+                                        lineHeight = 16.sp
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1021,6 +1292,551 @@ private fun HybridOpsSubScreen(
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold
                                     )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 6. Role-Specific Material Budget Sanity Check (Non-Mutating Certified Baseline)
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.5.dp, Color(0xFFFFB300), RoundedCornerShape(12.dp))
+                    .testTag("material_sanity_check_card")
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.FactCheck,
+                            contentDescription = "ตรวจความผิดปกติใบขอเบิกวัสดุ",
+                            tint = Color(0xFFFFB300),
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "ตรวจใบขอเบิกวัสดุ & ราคาผิดปกติ (Sanity Check)",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "เทียบเกณฑ์กลางอ่านอย่างเดียว • ข้อมูลชั่วคราวไม่ทับมาตรฐาน",
+                                fontSize = 11.sp,
+                                color = Color(0xFFFFD54F)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Surface(
+                        color = Color(0xFF1E293B),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(0.5.dp, Color(0xFF38BDF8).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "เกณฑ์กลางแบบอ่านอย่างเดียว",
+                                tint = Color(0xFF38BDF8),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "${CertifiedBaselineData.BASELINE_VERSION} • ${CertifiedBaselineData.ROLE_TITLE}",
+                                fontSize = 10.sp,
+                                color = Color(0xFFE0F2FE),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            color = Color(0xFF1E293B),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .border(0.5.dp, Color(0xFFFFB300).copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                                .clickable {
+                                    onMaterialAreaInputChange("ชั้น 1 (พื้นที่ 60 ตร.ม.)")
+                                    onMaterialRequestInputChange("ขอเบิกกระเบื้อง 95 ตร.ม. และปูนกาว 40 ถุง สำหรับปูพื้นชั้น 1")
+                                }
+                                .testTag("material_preset_60sqm_button")
+                        ) {
+                            Text(
+                                text = "เคส 60 ตร.ม. (ปูนกาว 40 ถุง / กระเบื้อง 95 ตร.ม.)",
+                                fontSize = 11.sp,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+                            )
+                        }
+
+                        Surface(
+                            color = Color(0xFF1E293B),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .border(0.5.dp, Color(0xFFFFB300).copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                                .clickable {
+                                    onMaterialAreaInputChange("Lot 3 งานกระจกและผนังเบา")
+                                    onMaterialRequestInputChange("สั่งซื้อกระจก Tempered 12mm Lot 3 ราคาสูงกว่างบกลาง +22% เพื่อส่งมอบทันงวดงาน")
+                                }
+                                .testTag("material_preset_lot3_button")
+                        ) {
+                            Text(
+                                text = "เคส Lot 3 ราคาสูงกว่าปกติ (+22% งานเร่งด่วน)",
+                                fontSize = 11.sp,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = materialAreaInput,
+                        onValueChange = onMaterialAreaInputChange,
+                        label = {
+                            Text(
+                                text = "พื้นที่ / Lot งานที่ขอเบิก (เช่น ชั้น 1 พื้นที่ 60 ตร.ม.)",
+                                color = Color(0xFF9CA3AF),
+                                fontSize = 11.sp
+                            )
+                        },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color(0xFFFFB300),
+                            unfocusedBorderColor = Color(0xFF374151)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("material_area_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = materialRequestInput,
+                        onValueChange = onMaterialRequestInputChange,
+                        label = {
+                            Text(
+                                text = "รายละเอียดใบขอเบิกวัสดุ/ราคาที่ลูกน้องส่งมา (ตรวจชั่วคราว)",
+                                color = Color(0xFF9CA3AF),
+                                fontSize = 11.sp
+                            )
+                        },
+                        minLines = 2,
+                        maxLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color(0xFFFFB300),
+                            unfocusedBorderColor = Color(0xFF374151)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("material_request_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Button(
+                        onClick = onRunMaterialSanityCheck,
+                        enabled = materialRequestInput.isNotBlank() && materialSanityCheckState !is MaterialSanityCheckUiState.Loading,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFFB300),
+                            contentColor = Color(0xFF030712)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("run_material_sanity_check_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.FactCheck,
+                            contentDescription = "ตรวจความผิดปกติเทียบเกณฑ์กลาง",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "ตรวจความผิดปกติเทียบเกณฑ์กลาง (Hybrid AI)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+            }
+        }
+
+        // 7. Material Sanity Check Result & Human Final Approval / Audit Note Panel
+        item {
+            when (materialSanityCheckState) {
+                is MaterialSanityCheckUiState.Idle -> Unit
+                is MaterialSanityCheckUiState.Loading -> {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("material_sanity_loading_card")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color(0xFFFFB300),
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.5.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "กำลังเทียบรายการขอเบิกกับ Certified Baseline (ไม่แก้ฐานข้อมูลกลาง)...",
+                                fontSize = 12.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+                is MaterialSanityCheckUiState.Success -> {
+                    val checkResult = materialSanityCheckState.result
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1324)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.5.dp, Color(0xFFFFB300), RoundedCornerShape(12.dp))
+                            .testTag("material_sanity_result_card")
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                InferenceSourcePill(
+                                    source = materialSanityCheckState.inferenceSource,
+                                    detailLabel = "Sanity Check"
+                                )
+                                IconButton(
+                                    onClick = onClearMaterialSanityCheck,
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .testTag("clear_material_sanity_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "ปิดผลตรวจใบเบิกวัสดุ",
+                                        tint = Color(0xFF9CA3AF),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = "🔒 เกณฑ์อ้างอิง: ${checkResult.baselineVersion}",
+                                fontSize = 10.sp,
+                                color = Color(0xFF38BDF8),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = checkResult.assessment,
+                                fontSize = 12.sp,
+                                color = Color.White,
+                                lineHeight = 19.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            OutlinedTextField(
+                                value = exceptionJustificationInput,
+                                onValueChange = onExceptionJustificationInputChange,
+                                label = {
+                                    Text(
+                                        text = "หมายเหตุโปร่งใสของผู้จัดการ (เหตุผลที่อนุมัติแพงขึ้น / ระงับตรวจ)",
+                                        color = Color(0xFF9CA3AF),
+                                        fontSize = 11.sp
+                                    )
+                                },
+                                placeholder = {
+                                    Text(
+                                        text = "เช่น Lot 3 ราคาสูงกว่าเกณฑ์ +22% แต่ต้องสั่งด่วนเพื่อส่งมอบทันงวด",
+                                        color = Color(0xFF6B7280),
+                                        fontSize = 11.sp
+                                    )
+                                },
+                                minLines = 2,
+                                maxLines = 3,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color(0xFF00E676),
+                                    unfocusedBorderColor = Color(0xFF374151)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("exception_justification_input")
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        onRecordExceptionAudit(
+                                            checkResult.requestInput,
+                                            checkResult.areaScope,
+                                            checkResult.baselineVersion,
+                                            checkResult.assessment,
+                                            "APPROVED_WITH_EXCEPTION",
+                                            exceptionJustificationInput,
+                                            checkResult.origin.name
+                                        )
+                                        onExceptionJustificationInputChange("")
+                                        Toast.makeText(
+                                            context,
+                                            "บันทึกอนุมัติข้อยกเว้นลง Audit Log แล้ว (เกณฑ์กลางไม่ถูกแก้ไข)",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF00E676),
+                                        contentColor = Color(0xFF030712)
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("approve_exception_audit_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "อนุมัติแบบมีข้อยกเว้นลง Audit Log",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "อนุมัติข้อยกเว้น",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        onRecordExceptionAudit(
+                                            checkResult.requestInput,
+                                            checkResult.areaScope,
+                                            checkResult.baselineVersion,
+                                            checkResult.assessment,
+                                            "HOLD_FOR_INVESTIGATION",
+                                            exceptionJustificationInput,
+                                            checkResult.origin.name
+                                        )
+                                        onExceptionJustificationInputChange("")
+                                        Toast.makeText(
+                                            context,
+                                            "บันทึกคำสั่งระงับ/เรียกชี้แจงลง Audit Log แล้ว",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("hold_exception_audit_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PauseCircle,
+                                        contentDescription = "ระงับและเรียกชี้แจงลง Audit Log",
+                                        tint = Color(0xFFFF8A80),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "ระงับ/เรียกชี้แจง",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFF8A80)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                is MaterialSanityCheckUiState.Error -> {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF3B1219)),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Color(0xFFFF5252), RoundedCornerShape(10.dp))
+                            .testTag("material_sanity_error_card")
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = "⚠️ ${materialSanityCheckState.message}",
+                                fontSize = 12.sp,
+                                color = Color.White
+                            )
+                            if (materialSanityCheckState.isOnDeviceUnavailable) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = onDisableOfflineMode,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF00E5FF),
+                                        contentColor = Color(0xFF030712)
+                                    ),
+                                    modifier = Modifier.testTag("switch_cloud_fallback_from_sanity_button")
+                                ) {
+                                    Text(
+                                        text = "ปิด Offline Mode เพื่อสลับกลับ Cloud Fallback",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 8. Saved Exception Audit Log Trail (Room DB v3 - Non-Mutating Transparency Record)
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF111827)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Color(0xFF374151), RoundedCornerShape(12.dp))
+                    .testTag("exception_audit_log_section")
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = "บันทึกหลักฐานข้อยกเว้น Audit Log",
+                            tint = Color(0xFF38BDF8),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "บันทึกหลักฐานข้อยกเว้น (Exception Audit Log: ${exceptionAudits.size})",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF38BDF8)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "เก็บหลักฐานเหตุผลที่อนุมัติหรือระงับเฉพาะ Lot/เคส โดยไม่ไปแก้เกณฑ์มาตรฐานกลาง",
+                        fontSize = 10.sp,
+                        color = Color(0xFF9CA3AF)
+                    )
+
+                    if (exceptionAudits.isEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "ยังไม่มีบันทึกข้อยกเว้น — กด \"ตรวจความผิดปกติเทียบเกณฑ์กลาง\" แล้วเลือกอนุมัติข้อยกเว้นหรือระงับเพื่อเก็บหลักฐานโปร่งใส",
+                            fontSize = 11.sp,
+                            color = Color(0xFFD1D5DB),
+                            lineHeight = 16.sp
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            exceptionAudits.take(10).forEach { audit ->
+                                val isApproved = audit.decisionStatus == "APPROVED_WITH_EXCEPTION"
+                                val badgeColor = if (isApproved) Color(0xFF00E676) else Color(0xFFFF5252)
+                                val badgeText = if (isApproved) "APPROVED EXCEPTION" else "HOLD / AUDIT"
+                                val formattedTime = auditDateFormatter.format(Date(audit.timestamp))
+
+                                Surface(
+                                    color = Color(0xFF0B1324),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(0.75.dp, badgeColor.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
+                                        .testTag("exception_audit_item_${audit.id}")
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Surface(
+                                                color = badgeColor.copy(alpha = 0.16f),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = badgeText,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = badgeColor,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = { onDeleteExceptionAudit(audit) },
+                                                modifier = Modifier
+                                                    .size(48.dp)
+                                                    .testTag("delete_exception_audit_${audit.id}")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.DeleteOutline,
+                                                    contentDescription = "ลบบันทึกข้อยกเว้น ${audit.lotOrItemTitle}",
+                                                    tint = Color(0xFF9CA3AF),
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                        Text(
+                                            text = "${audit.areaOrScope} • ${audit.lotOrItemTitle}",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "เหตุผล: ${audit.justificationNote}",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFFE5E7EB),
+                                            lineHeight = 16.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "$formattedTime • ${audit.inferenceOrigin} • ไม่ทับเกณฑ์มาตรฐานกลาง",
+                                            fontSize = 10.sp,
+                                            color = Color(0xFF9CA3AF)
+                                        )
+                                    }
                                 }
                             }
                         }

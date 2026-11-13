@@ -7,7 +7,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.AiInferenceOrigin
 import com.example.data.CareerShieldRepository
+import com.example.data.ExceptionAuditEntity
 import com.example.data.GeminiAiRepository
+import com.example.data.MaterialSanityCheckResult
+import com.example.data.Nano4DiagnosticResult
+import com.example.data.NanoDiagnosticLanguage
 import com.example.data.ScriptEntity
 import com.example.data.TaskEntity
 import com.example.util.SitePhotoStorage
@@ -59,6 +63,7 @@ fun AiInferenceOrigin.toHybridSource(): HybridInferenceSource =
 data class LastInferenceInfo(
     val source: HybridInferenceSource = HybridInferenceSource.STANDBY,
     val featureLabel: String = "พร้อมทำงาน",
+    val verifiedModelName: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -184,6 +189,31 @@ sealed interface LiveVoiceUiState {
     data class Error(val message: String) : LiveVoiceUiState
 }
 
+sealed interface NanoDiagnosticUiState {
+    data object Idle : NanoDiagnosticUiState
+    data class Running(val language: NanoDiagnosticLanguage) : NanoDiagnosticUiState
+    data class Success(
+        val result: Nano4DiagnosticResult,
+        val actualSource: HybridInferenceSource
+    ) : NanoDiagnosticUiState
+    data class UnavailableOrError(
+        val result: Nano4DiagnosticResult
+    ) : NanoDiagnosticUiState
+}
+
+sealed interface MaterialSanityCheckUiState {
+    data object Idle : MaterialSanityCheckUiState
+    data object Loading : MaterialSanityCheckUiState
+    data class Success(
+        val result: MaterialSanityCheckResult,
+        val inferenceSource: HybridInferenceSource
+    ) : MaterialSanityCheckUiState
+    data class Error(
+        val message: String,
+        val isOnDeviceUnavailable: Boolean = false
+    ) : MaterialSanityCheckUiState
+}
+
 @OptIn(ExperimentalCoroutinesApi::class, PublicPreviewAPI::class)
 class CareerShieldViewModel(
     private val repository: CareerShieldRepository,
@@ -223,17 +253,36 @@ class CareerShieldViewModel(
             initialValue = emptyList()
         )
 
+    val exceptionAudits: StateFlow<List<ExceptionAuditEntity>> = repository.allExceptionAudits
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     private val _offlineSiteTestMode = MutableStateFlow(false)
     val offlineSiteTestMode: StateFlow<Boolean> = _offlineSiteTestMode.asStateFlow()
 
     private val _lastInferenceState = MutableStateFlow(LastInferenceInfo())
     val lastInferenceState: StateFlow<LastInferenceInfo> = _lastInferenceState.asStateFlow()
 
-    private val _onDeviceStatusLabel = MutableStateFlow("กำลังตรวจสอบ AICore / Gemini Nano...")
+    private val _onDeviceStatusLabel = MutableStateFlow("กำลังตรวจสอบ AICore / OnDeviceModelOption.PREVIEW...")
     val onDeviceStatusLabel: StateFlow<String> = _onDeviceStatusLabel.asStateFlow()
 
     private val _isOnDeviceDownloadable = MutableStateFlow(false)
     val isOnDeviceDownloadable: StateFlow<Boolean> = _isOnDeviceDownloadable.asStateFlow()
+
+    private val _verifiedOnDeviceModelName = MutableStateFlow<String?>(null)
+    val verifiedOnDeviceModelName: StateFlow<String?> = _verifiedOnDeviceModelName.asStateFlow()
+
+    private val _deviceCompatibilitySummary = MutableStateFlow("")
+    val deviceCompatibilitySummary: StateFlow<String> = _deviceCompatibilitySummary.asStateFlow()
+
+    private val _nanoDiagnosticState = MutableStateFlow<NanoDiagnosticUiState>(NanoDiagnosticUiState.Idle)
+    val nanoDiagnosticState: StateFlow<NanoDiagnosticUiState> = _nanoDiagnosticState.asStateFlow()
+
+    private val _materialSanityCheckState = MutableStateFlow<MaterialSanityCheckUiState>(MaterialSanityCheckUiState.Idle)
+    val materialSanityCheckState: StateFlow<MaterialSanityCheckUiState> = _materialSanityCheckState.asStateFlow()
 
     private val _siteSafetyRiskState = MutableStateFlow<SiteSafetyRiskUiState>(SiteSafetyRiskUiState.Idle)
     val siteSafetyRiskState: StateFlow<SiteSafetyRiskUiState> = _siteSafetyRiskState.asStateFlow()
@@ -283,10 +332,15 @@ class CareerShieldViewModel(
         refreshOnDeviceStatus()
     }
 
-    private fun recordInferenceSource(source: HybridInferenceSource, featureLabel: String) {
+    private fun recordInferenceSource(
+        source: HybridInferenceSource,
+        featureLabel: String,
+        verifiedModelName: String? = _verifiedOnDeviceModelName.value
+    ) {
         _lastInferenceState.value = LastInferenceInfo(
             source = source,
             featureLabel = featureLabel,
+            verifiedModelName = if (source == HybridInferenceSource.ON_DEVICE) verifiedModelName else null,
             timestamp = System.currentTimeMillis()
         )
     }
@@ -304,17 +358,47 @@ class CareerShieldViewModel(
             val capability = aiRepository.checkOnDeviceCapability()
             _onDeviceStatusLabel.value = capability.statusLabel
             _isOnDeviceDownloadable.value = capability.isDownloadable
+            _verifiedOnDeviceModelName.value = capability.detectedModelName
+            _deviceCompatibilitySummary.value = capability.deviceSummary
         }
+    }
+
+    fun runNano4PreviewDiagnostic(language: NanoDiagnosticLanguage) {
+        viewModelScope.launch {
+            _nanoDiagnosticState.value = NanoDiagnosticUiState.Running(language)
+            val result = aiRepository.runNano4PreviewDiagnostic(language)
+            if (result.detectedModelName != null) {
+                _verifiedOnDeviceModelName.value = result.detectedModelName
+            }
+            if (result.isSuccess && result.inferenceSource != null) {
+                val actualSource = result.inferenceSource.toHybridSource()
+                recordInferenceSource(
+                    source = actualSource,
+                    featureLabel = "Diagnostic (${language.name})",
+                    verifiedModelName = result.detectedModelName
+                )
+                _nanoDiagnosticState.value = NanoDiagnosticUiState.Success(
+                    result = result,
+                    actualSource = actualSource
+                )
+            } else {
+                _nanoDiagnosticState.value = NanoDiagnosticUiState.UnavailableOrError(result)
+            }
+        }
+    }
+
+    fun clearNanoDiagnostic() {
+        _nanoDiagnosticState.value = NanoDiagnosticUiState.Idle
     }
 
     fun downloadOnDeviceModel() {
         viewModelScope.launch {
             try {
                 val downloadFlow = aiRepository.downloadOnDeviceModel() ?: run {
-                    _onDeviceStatusLabel.value = "อุปกรณ์ไม่รองรับ AICore (ใช้ Cloud Fallback)"
+                    _onDeviceStatusLabel.value = "อุปกรณ์ไม่รองรับ AICore Preview (ใช้ Cloud Fallback)"
                     return@launch
                 }
-                _onDeviceStatusLabel.value = "กำลังเริ่มดาวน์โหลด Gemini Nano..."
+                _onDeviceStatusLabel.value = "กำลังเริ่มดาวน์โหลดโมเดล On-Device Preview..."
                 downloadFlow.collect { downloadStatus ->
                     when (downloadStatus) {
                         is DownloadStatus.DownloadStarted -> {
@@ -322,23 +406,23 @@ class CareerShieldViewModel(
                         }
                         is DownloadStatus.DownloadInProgress -> {
                             val mb = downloadStatus.totalBytesDownloaded / (1024 * 1024)
-                            _onDeviceStatusLabel.value = "กำลังดาวน์โหลด Nano ($mb MB)..."
+                            _onDeviceStatusLabel.value = "กำลังดาวน์โหลดโมเดล On-Device ($mb MB)..."
                         }
                         is DownloadStatus.DownloadCompleted -> {
                             _isOnDeviceDownloadable.value = false
-                            _onDeviceStatusLabel.value = "Gemini Nano พร้อมใช้งานออฟไลน์"
+                            refreshOnDeviceStatus()
                         }
                         is DownloadStatus.DownloadFailed -> {
                             _onDeviceStatusLabel.value =
-                                "ดาวน์โหลด Nano ไม่สำเร็จ: ${downloadStatus.exception.localizedMessage ?: "error"}"
+                                "ดาวน์โหลด On-Device ไม่สำเร็จ: ${downloadStatus.exception.localizedMessage ?: "error"}"
                         }
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to download on-device Gemini Nano model", e)
-                _onDeviceStatusLabel.value = "ดาวน์โหลด Nano ไม่สำเร็จ (ใช้ Cloud Fallback)"
+                Log.e(TAG, "Failed to download on-device model", e)
+                _onDeviceStatusLabel.value = "ดาวน์โหลด On-Device ไม่สำเร็จ (ใช้ Cloud Fallback)"
             }
         }
     }
@@ -712,6 +796,92 @@ class CareerShieldViewModel(
                 message = e.localizedMessage ?: "เกิดข้อผิดพลาดในการเรียก Hybrid AI",
                 isOnDeviceUnavailable = isUnavailable
             )
+        }
+    }
+
+    // Hybrid Use Case 5: Material Budget Sanity Check (Immutable Baseline + Audit-Logged Exception)
+    fun runMaterialSanityCheck(areaScope: String, requestDescription: String) {
+        val trimmed = requestDescription.trim()
+        if (trimmed.isEmpty()) {
+            _materialSanityCheckState.value = MaterialSanityCheckUiState.Error(
+                message = "กรุณาระบุรายการขอเบิกวัสดุและจำนวนที่ลูกน้องส่งมาให้ตรวจสอบ"
+            )
+            return
+        }
+        viewModelScope.launch {
+            _materialSanityCheckState.value = MaterialSanityCheckUiState.Loading
+            try {
+                val result = aiRepository.auditMaterialRequisition(
+                    areaScope = areaScope,
+                    requestDescription = trimmed,
+                    offlineOnly = _offlineSiteTestMode.value
+                )
+                val source = result.origin.toHybridSource()
+                recordInferenceSource(source, "ตรวจใบเบิกวัสดุ")
+                _materialSanityCheckState.value = MaterialSanityCheckUiState.Success(
+                    result = result,
+                    inferenceSource = source
+                )
+            } catch (e: FirebaseAIOnDeviceNotAvailableException) {
+                Log.w(TAG, "On-device unavailable during Material Sanity Check", e)
+                _materialSanityCheckState.value = MaterialSanityCheckUiState.Error(
+                    message = "โหมด Offline Site (ONLY_ON_DEVICE) ตรวจไม่พบ AICore บนเครื่องนี้ (${e.localizedMessage ?: "Unavailable"})",
+                    isOnDeviceUnavailable = true
+                )
+            } catch (e: TimeoutCancellationException) {
+                _materialSanityCheckState.value = MaterialSanityCheckUiState.Error(
+                    message = "การตรวจสอบใบเบิกวัสดุหมดเวลา (60 วินาที) กรุณาลองใหม่"
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Material sanity check failed", e)
+                val isUnavailable = e.message?.contains("on-device", ignoreCase = true) == true && _offlineSiteTestMode.value
+                _materialSanityCheckState.value = MaterialSanityCheckUiState.Error(
+                    message = e.localizedMessage ?: "ไม่สามารถตรวจสอบใบขอเบิกวัสดุได้",
+                    isOnDeviceUnavailable = isUnavailable
+                )
+            }
+        }
+    }
+
+    fun clearMaterialSanityCheck() {
+        _materialSanityCheckState.value = MaterialSanityCheckUiState.Idle
+    }
+
+    fun recordExceptionAudit(
+        lotOrItemTitle: String,
+        areaScope: String,
+        baselineVersion: String,
+        aiFlagSummary: String,
+        decisionStatus: String,
+        justificationNote: String,
+        inferenceOrigin: String
+    ) {
+        viewModelScope.launch {
+            repository.insertExceptionAudit(
+                ExceptionAuditEntity(
+                    lotOrItemTitle = lotOrItemTitle.trim().take(120),
+                    areaOrScope = areaScope.trim().ifBlank { "ไม่ระบุพื้นที่" },
+                    baselineVersion = baselineVersion,
+                    aiFlagSummary = aiFlagSummary.trim().take(400),
+                    decisionStatus = decisionStatus,
+                    justificationNote = justificationNote.trim().ifBlank {
+                        if (decisionStatus == "APPROVED_WITH_EXCEPTION") {
+                            "ผู้จัดการอนุมัติข้อยกเว้นเฉพาะเคสนี้ (ไม่ทับเกณฑ์มาตรฐานกลาง)"
+                        } else {
+                            "ระงับไว้ตรวจสอบแบบและเรียกผู้ขอเบิกชี้แจงเพิ่มเติม"
+                        }
+                    },
+                    inferenceOrigin = inferenceOrigin
+                )
+            )
+        }
+    }
+
+    fun deleteExceptionAudit(audit: ExceptionAuditEntity) {
+        viewModelScope.launch {
+            repository.deleteExceptionAudit(audit)
         }
     }
 

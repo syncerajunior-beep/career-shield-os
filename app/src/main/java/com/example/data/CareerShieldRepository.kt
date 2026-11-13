@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 class CareerShieldRepository(private val taskDao: TaskDao) {
     val allTasks: Flow<List<TaskEntity>> = taskDao.getAllTasks()
     val allScripts: Flow<List<ScriptEntity>> = taskDao.getAllScripts()
+    val allExceptionAudits: Flow<List<ExceptionAuditEntity>> = taskDao.getAllExceptionAudits()
 
     fun getFilteredTasks(category: String, searchQuery: String): Flow<List<TaskEntity>> =
         taskDao.getFilteredTasks(category, searchQuery.trim())
@@ -22,6 +23,10 @@ class CareerShieldRepository(private val taskDao: TaskDao) {
     suspend fun updateScript(script: ScriptEntity) = taskDao.updateScript(script)
 
     suspend fun deleteScript(script: ScriptEntity) = taskDao.deleteScript(script)
+
+    suspend fun insertExceptionAudit(audit: ExceptionAuditEntity) = taskDao.insertExceptionAudit(audit)
+
+    suspend fun deleteExceptionAudit(audit: ExceptionAuditEntity) = taskDao.deleteExceptionAudit(audit)
 
     suspend fun ensureSeedData() {
         if (taskDao.getTaskCount() == 0) {

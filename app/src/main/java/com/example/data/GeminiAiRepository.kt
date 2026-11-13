@@ -1,6 +1,7 @@
 package com.example.data
 
 import android.graphics.Bitmap
+import android.os.Build
 import com.google.firebase.Firebase
 import com.google.firebase.ai.Chat
 import com.google.firebase.ai.DownloadStatus
@@ -8,9 +9,11 @@ import com.google.firebase.ai.GenerativeModel
 import com.google.firebase.ai.InferenceMode
 import com.google.firebase.ai.InferenceSource
 import com.google.firebase.ai.OnDeviceConfig
+import com.google.firebase.ai.OnDeviceModelOption
 import com.google.firebase.ai.OnDeviceModelStatus
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.AudioTranscriptionConfig
+import com.google.firebase.ai.type.GenerativeBackend
 import com.google.firebase.ai.type.LiveSession
 import com.google.firebase.ai.type.PublicPreviewAPI
 import com.google.firebase.ai.type.ResponseModality
@@ -23,7 +26,6 @@ import com.google.firebase.ai.type.liveGenerationConfig
 import com.google.firebase.ai.type.thinkingConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
@@ -83,12 +85,46 @@ data class AiChatResponse(
 
 data class OnDeviceCapabilityState(
     val statusLabel: String,
-    val isDownloadable: Boolean
+    val isDownloadable: Boolean,
+    val isAvailable: Boolean = false,
+    val detectedModelName: String? = null,
+    val configuredOptionLabel: String = "OnDeviceModelOption.PREVIEW (nano-v4-full / Gemma 4 E4B)",
+    val androidSdkInt: Int = Build.VERSION.SDK_INT,
+    val deviceSummary: String = "${Build.MANUFACTURER} ${Build.MODEL} (API ${Build.VERSION.SDK_INT})"
+)
+
+enum class NanoDiagnosticLanguage {
+    ENGLISH,
+    THAI
+}
+
+data class Nano4DiagnosticResult(
+    val language: NanoDiagnosticLanguage,
+    val prompt: String,
+    val isSuccess: Boolean,
+    val responseText: String = "",
+    val inferenceSource: AiInferenceOrigin? = null,
+    val preCallStatus: String,
+    val detectedModelName: String?,
+    val errorType: String? = null,
+    val errorMessage: String? = null,
+    val deviceInfo: String
+)
+
+data class MaterialSanityCheckResult(
+    val areaScope: String,
+    val requestInput: String,
+    val baselineVersion: String,
+    val baselineExcerpt: String,
+    val assessment: String,
+    val origin: AiInferenceOrigin
 )
 
 /**
  * Repository encapsulating all Firebase AI Logic integrations for Career Shield OS:
- * - Hybrid Inference (Gemini Nano 4 via AICore PREFER_ON_DEVICE / ONLY_ON_DEVICE + Cloud Fallback)
+ * - Hybrid Inference targeting Gemini Nano 4 Full Preview (`OnDeviceModelOption.PREVIEW`,
+ *   model family `nano-v4-full`, Gemma 4 E4B foundation) via AICore + Cloud Fallback (`gemini-3.8-flash`)
+ * - Dedicated ONLY_ON_DEVICE Nano 4 Preview diagnostic path (never falls back to Cloud)
  * - Construction site safety risk analysis from text inputs
  * - Contract clause risk analysis (Google Search grounding & High Thinking)
  * - Multimodal site photo inspection, multi-turn chat, structured JSON action packs, and Live Voice
@@ -99,15 +135,23 @@ class GeminiAiRepository {
     companion object {
         private const val REQUEST_TIMEOUT_MS = 60_000L
         private const val LIVE_CONNECT_TIMEOUT_MS = 30_000L
+        const val HYBRID_CLOUD_FALLBACK_MODEL = "gemini-3.8-flash"
+        const val ON_DEVICE_PREVIEW_TARGET = "OnDeviceModelOption.PREVIEW (nano-v4-full / Gemma 4 E4B)"
+        const val ON_DEVICE_DIAGNOSTIC_MAX_TOKENS = 256
     }
 
-    // Construction Site Safety Risk Analysis Models (Hybrid: PREFER_ON_DEVICE & ONLY_ON_DEVICE)
+    private val hybridAi by lazy {
+        Firebase.ai(backend = GenerativeBackend.googleAI())
+    }
+
+    // Construction Site Safety Risk Analysis Models (Hybrid: PREFER_ON_DEVICE & ONLY_ON_DEVICE with PREVIEW)
     private val siteSafetyPreferOnDeviceModel: GenerativeModel by lazy {
-        Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+        hybridAi.generativeModel(
+            modelName = HYBRID_CLOUD_FALLBACK_MODEL,
             onDeviceConfig = OnDeviceConfig(
                 mode = InferenceMode.PREFER_ON_DEVICE,
-                maxOutputTokens = 768
+                modelOption = OnDeviceModelOption.PREVIEW,
+                maxOutputTokens = ON_DEVICE_DIAGNOSTIC_MAX_TOKENS
             ),
             systemInstruction = content {
                 text(
@@ -121,11 +165,12 @@ class GeminiAiRepository {
     }
 
     private val siteSafetyOfflineOnlyModel: GenerativeModel by lazy {
-        Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+        hybridAi.generativeModel(
+            modelName = HYBRID_CLOUD_FALLBACK_MODEL,
             onDeviceConfig = OnDeviceConfig(
                 mode = InferenceMode.ONLY_ON_DEVICE,
-                maxOutputTokens = 768
+                modelOption = OnDeviceModelOption.PREVIEW,
+                maxOutputTokens = ON_DEVICE_DIAGNOSTIC_MAX_TOKENS
             ),
             systemInstruction = content {
                 text(
@@ -138,13 +183,14 @@ class GeminiAiRepository {
         )
     }
 
-    // General Hybrid Ops Models (PREFER_ON_DEVICE & ONLY_ON_DEVICE)
+    // General Hybrid Ops Models (PREFER_ON_DEVICE & ONLY_ON_DEVICE with OnDeviceModelOption.PREVIEW)
     private val hybridPreferOnDeviceModel: GenerativeModel by lazy {
-        Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+        hybridAi.generativeModel(
+            modelName = HYBRID_CLOUD_FALLBACK_MODEL,
             onDeviceConfig = OnDeviceConfig(
                 mode = InferenceMode.PREFER_ON_DEVICE,
-                maxOutputTokens = 512
+                modelOption = OnDeviceModelOption.PREVIEW,
+                maxOutputTokens = ON_DEVICE_DIAGNOSTIC_MAX_TOKENS
             ),
             systemInstruction = content {
                 text(
@@ -158,11 +204,12 @@ class GeminiAiRepository {
     }
 
     private val hybridOfflineOnlyModel: GenerativeModel by lazy {
-        Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+        hybridAi.generativeModel(
+            modelName = HYBRID_CLOUD_FALLBACK_MODEL,
             onDeviceConfig = OnDeviceConfig(
                 mode = InferenceMode.ONLY_ON_DEVICE,
-                maxOutputTokens = 512
+                modelOption = OnDeviceModelOption.PREVIEW,
+                maxOutputTokens = ON_DEVICE_DIAGNOSTIC_MAX_TOKENS
             ),
             systemInstruction = content {
                 text(
@@ -172,6 +219,18 @@ class GeminiAiRepository {
                     """.trimIndent()
                 )
             }
+        )
+    }
+
+    // Dedicated Nano 4 Full Preview Diagnostic Model: strict ONLY_ON_DEVICE, NO Cloud Fallback
+    private val nano4PreviewDiagnosticModel: GenerativeModel by lazy {
+        hybridAi.generativeModel(
+            modelName = HYBRID_CLOUD_FALLBACK_MODEL,
+            onDeviceConfig = OnDeviceConfig(
+                mode = InferenceMode.ONLY_ON_DEVICE,
+                modelOption = OnDeviceModelOption.PREVIEW,
+                maxOutputTokens = ON_DEVICE_DIAGNOSTIC_MAX_TOKENS
+            )
         )
     }
 
@@ -355,6 +414,63 @@ class GeminiAiRepository {
         )
     }
 
+    fun buildMaterialSanityCheckPrompt(
+        areaScope: String,
+        requestDescription: String,
+        baselineExcerpt: String
+    ): String = """
+        คุณคือผู้ช่วยตรวจสอบความผิดปกติใบขอเบิกวัสดุของตำแหน่ง "${CertifiedBaselineData.ROLE_TITLE}"
+        กฎเหล็ก:
+        1) อ้างอิงเฉพาะฐานมาตรฐานรับรองด้านล่างและตัวเลขที่ผู้ใช้งานส่งเข้ามาในรอบนี้เท่านั้น ห้ามค้นเว็บภายนอกและห้ามแต่งตัวเลขหรือมาตรฐานขึ้นมาเอง
+        2) หากข้อมูลในใบขอเบิกไม่เพียงพอ (เช่น ไม่ระบุความหนา ระยะเผื่อ หรือแบบหน้างาน) ให้ระบุชัดว่าส่วนใดยังไม่ครบ เพื่อให้ผู้จัดการถามลูกน้องเพิ่ม
+        3) คำตอบนี้เป็น "สัญญาณตรวจจับความผิดปกติเบื้องต้น" เท่านั้น — ผู้จัดการโครงการเป็นผู้ตัดสินใจอนุมัติขั้นสุดท้าย และข้อยกเว้นรอบนี้จะไม่ถูกนำไปแก้ทับมาตรฐานกลาง
+
+        $baselineExcerpt
+
+        [คำขอเบิกชั่วคราวเฉพาะรอบนี้ (Ephemeral Input)]
+        - พื้นที่/ขอบเขตงาน: ${areaScope.ifBlank { "ไม่ระบุพื้นที่" }}
+        - รายการขอเบิก: "$requestDescription"
+
+        กรุณาสรุปกระชับ 3 ข้อ:
+        1. 🔍 สัญญาณความผิดปกติ (ปกติ / น่าสงสัย Over-claim / ข้อมูลไม่พอ) พร้อมเทียบส่วนต่างกับเกณฑ์ปลอดภัยด้านบน
+        2. ❓ คำถามจี้จุดที่ผู้จัดการควรถามลูกน้อง/โฟร์แมนก่อนอนุมัติ
+        3. 📝 คำแนะนำบันทึกเหตุผลข้อยกเว้น (หากจำเป็นต้องอนุมัติแพงกว่าเกณฑ์ เช่น งานเร่งด่วนกันค่าปรับ LD)
+    """.trimIndent()
+
+    suspend fun auditMaterialRequisition(
+        areaScope: String,
+        requestDescription: String,
+        offlineOnly: Boolean
+    ): MaterialSanityCheckResult {
+        val trimmedReq = requestDescription.trim()
+        require(trimmedReq.isNotEmpty()) { "กรุณาระบุรายการขอเบิกวัสดุหรือรายละเอียดงบที่ต้องการตรวจ" }
+        val cleanArea = areaScope.trim().ifBlank { "พื้นที่หน้างานตามใบขอเบิก" }
+        val baselineExcerpt = CertifiedBaselineData.findRelevantBaselineText("$cleanArea $trimmedReq")
+        val prompt = buildMaterialSanityCheckPrompt(
+            areaScope = cleanArea,
+            requestDescription = trimmedReq,
+            baselineExcerpt = baselineExcerpt
+        )
+
+        val model = if (offlineOnly) hybridOfflineOnlyModel else hybridPreferOnDeviceModel
+        val response = withTimeout(REQUEST_TIMEOUT_MS) {
+            model.generateContent(prompt)
+        }
+        val text = response.text?.trim().orEmpty()
+        if (text.isBlank()) {
+            throw IllegalStateException("ไม่ได้รับผลการตรวจสอบใบขอเบิกวัสดุจากโมเดล AI")
+        }
+
+        return MaterialSanityCheckResult(
+            areaScope = cleanArea,
+            requestInput = trimmedReq,
+            baselineVersion = CertifiedBaselineData.BASELINE_VERSION,
+            baselineExcerpt = baselineExcerpt,
+            assessment = text,
+            origin = response.inferenceSource.toOrigin()
+        )
+    }
+
     suspend fun inspectSitePhoto(
         bitmap: Bitmap,
         focusNote: String
@@ -524,48 +640,149 @@ class GeminiAiRepository {
         }
     }
 
+    fun buildDiagnosticPrompt(language: NanoDiagnosticLanguage): String = when (language) {
+        NanoDiagnosticLanguage.ENGLISH ->
+            "List 3 concise construction scaffolding fall-protection checks before workers climb."
+        NanoDiagnosticLanguage.THAI ->
+            "สรุป 3 ข้อตรวจสอบความปลอดภัยนั่งร้านก่อสร้างก่อนเริ่มงานอย่างกระชับ"
+    }
+
     suspend fun checkOnDeviceCapability(): OnDeviceCapabilityState {
+        val deviceSummary = "${Build.MANUFACTURER} ${Build.MODEL} (Android SDK ${Build.VERSION.SDK_INT})".trim()
         return try {
-            val extension = hybridPreferOnDeviceModel.onDeviceExtension
+            val extension = nano4PreviewDiagnosticModel.onDeviceExtension
                 ?: return OnDeviceCapabilityState(
-                    statusLabel = "อุปกรณ์ไม่รองรับ AICore (ใช้ Cloud Fallback)",
-                    isDownloadable = false
+                    statusLabel = "ไม่พบ OnDeviceExtension (ใช้ Cloud Fallback)",
+                    isDownloadable = false,
+                    isAvailable = false,
+                    deviceSummary = deviceSummary
                 )
-            when (extension.checkStatus()) {
+            val status = extension.checkStatus()
+            val detectedName = runCatching { extension.getModelName() }.getOrNull()?.takeIf { it.isNotBlank() }
+            when (status) {
                 OnDeviceModelStatus.AVAILABLE -> {
-                    val nanoName = runCatching { extension.getModelName() }.getOrNull()
-                    val label = if (!nanoName.isNullOrBlank()) {
-                        "Nano พร้อมใช้งาน ($nanoName)"
+                    val label = if (detectedName != null) {
+                        "AICore On-Device พร้อมใช้งาน ($detectedName)"
                     } else {
-                        "Gemini Nano พร้อมใช้งานออฟไลน์"
+                        "AICore On-Device พร้อมใช้งาน (ยังไม่ได้ยืนยันชื่อโมเดล Preview)"
                     }
-                    OnDeviceCapabilityState(statusLabel = label, isDownloadable = false)
+                    OnDeviceCapabilityState(
+                        statusLabel = label,
+                        isDownloadable = false,
+                        isAvailable = true,
+                        detectedModelName = detectedName,
+                        deviceSummary = deviceSummary
+                    )
                 }
                 OnDeviceModelStatus.DOWNLOADABLE -> OnDeviceCapabilityState(
-                    statusLabel = "ดาวน์โหลด Gemini Nano ได้",
-                    isDownloadable = true
+                    statusLabel = "ดาวน์โหลดโมเดล On-Device Preview ได้",
+                    isDownloadable = true,
+                    isAvailable = false,
+                    detectedModelName = detectedName,
+                    deviceSummary = deviceSummary
                 )
                 OnDeviceModelStatus.DOWNLOADING -> OnDeviceCapabilityState(
-                    statusLabel = "กำลังดาวน์โหลด Gemini Nano...",
-                    isDownloadable = false
+                    statusLabel = "กำลังดาวน์โหลดโมเดล On-Device Preview...",
+                    isDownloadable = false,
+                    isAvailable = false,
+                    detectedModelName = detectedName,
+                    deviceSummary = deviceSummary
                 )
                 else -> OnDeviceCapabilityState(
-                    statusLabel = "อุปกรณ์ไม่รองรับ AICore (ใช้ Cloud Fallback)",
-                    isDownloadable = false
+                    statusLabel = "อุปกรณ์ไม่รองรับ AICore Preview (${status}) • ใช้ Cloud Fallback",
+                    isDownloadable = false,
+                    isAvailable = false,
+                    detectedModelName = detectedName,
+                    deviceSummary = deviceSummary
                 )
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             OnDeviceCapabilityState(
-                statusLabel = "อุปกรณ์ไม่รองรับ AICore (ใช้ Cloud Fallback)",
-                isDownloadable = false
+                statusLabel = "AICore Preview ไม่พร้อมใช้งาน (${e::class.simpleName ?: "Unavailable"}) • ใช้ Cloud Fallback",
+                isDownloadable = false,
+                isAvailable = false,
+                deviceSummary = deviceSummary
+            )
+        }
+    }
+
+    /**
+     * Dedicated Gemini Nano 4 Full Preview diagnostic call (`OnDeviceModelOption.PREVIEW` +
+     * `InferenceMode.ONLY_ON_DEVICE`, `maxOutputTokens = 256`).
+     * Never falls back to Cloud — returns either the actual on-device response + `inferenceSource`
+     * or the authentic SDK unavailability/error details.
+     */
+    suspend fun runNano4PreviewDiagnostic(language: NanoDiagnosticLanguage): Nano4DiagnosticResult {
+        val prompt = buildDiagnosticPrompt(language)
+        val deviceInfo = "${Build.MANUFACTURER} ${Build.MODEL} | API ${Build.VERSION.SDK_INT} | ABI=${Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"}"
+        var preCallStatus = "NOT_CHECKED"
+        var detectedModelName: String? = null
+
+        return try {
+            val extension = nano4PreviewDiagnosticModel.onDeviceExtension
+            preCallStatus = try {
+                extension?.checkStatus()?.toString() ?: "NO_ON_DEVICE_EXTENSION"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                "STATUS_CHECK_FAILED: ${e::class.simpleName}: ${e.localizedMessage ?: e.message ?: "unknown"}"
+            }
+            detectedModelName = try {
+                extension?.getModelName()?.takeIf { it.isNotBlank() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                null
+            }
+
+            val response = withTimeout(REQUEST_TIMEOUT_MS) {
+                nano4PreviewDiagnosticModel.generateContent(prompt)
+            }
+            val text = response.text?.trim().orEmpty()
+            if (text.isBlank()) {
+                Nano4DiagnosticResult(
+                    language = language,
+                    prompt = prompt,
+                    isSuccess = false,
+                    inferenceSource = response.inferenceSource.toOrigin(),
+                    preCallStatus = preCallStatus,
+                    detectedModelName = detectedModelName,
+                    errorType = "EmptyResponse",
+                    errorMessage = "โมเดลบนอุปกรณ์ส่งผลลัพธ์ว่างกลับมา",
+                    deviceInfo = deviceInfo
+                )
+            } else {
+                Nano4DiagnosticResult(
+                    language = language,
+                    prompt = prompt,
+                    isSuccess = true,
+                    responseText = text,
+                    inferenceSource = response.inferenceSource.toOrigin(),
+                    preCallStatus = preCallStatus,
+                    detectedModelName = detectedModelName,
+                    deviceInfo = deviceInfo
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Nano4DiagnosticResult(
+                language = language,
+                prompt = prompt,
+                isSuccess = false,
+                preCallStatus = preCallStatus,
+                detectedModelName = detectedModelName,
+                errorType = e::class.simpleName ?: "Throwable",
+                errorMessage = e.localizedMessage ?: e.message ?: e.toString(),
+                deviceInfo = deviceInfo
             )
         }
     }
 
     fun downloadOnDeviceModel(): Flow<DownloadStatus>? {
-        val extension = hybridPreferOnDeviceModel.onDeviceExtension ?: return null
+        val extension = nano4PreviewDiagnosticModel.onDeviceExtension ?: return null
         return extension.download()
     }
 }

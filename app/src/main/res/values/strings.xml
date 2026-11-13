@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Career Shield</string>
     <string name="header_title">CAREER SHIELD OS</string>
-    <string name="header_subtitle">Hybrid AI (Gemini Nano 4 + Cloud Fallback) • Room DB</string>
+    <string name="header_subtitle">Hybrid AI (Nano 4 Preview Target + Cloud) • Room DB</string>
     <string name="tab_checklist">เช็กลิสต์</string>
     <string name="tab_sos_scripts">สคริปต์ SOS</string>
     <string name="tab_contract_scanner">สแกน LD &amp; รูป</string>
@@ -20,7 +20,7 @@
     <string name="reset_day_button">เริ่มวันใหม่</string>
     <string name="contract_scanner_title">LD &amp; Site Photo Scanner (Cloud Gemini Multimodal)</string>
     <string name="contract_scanner_subtitle">สแกนความเสี่ยงข้อสัญญาก่อสร้าง ค่าปรับ LD และตรวจวิเคราะห์ภาพถ่ายจุดเสี่ยงหน้างานผ่าน Cloud Gemini</string>
-    <string name="ai_thinking_title">ที่ปรึกษาอาวุโส Hybrid AI (Gemini Nano 4 + Cloud Gemini)</string>
-    <string name="ai_thinking_subtitle">รันออฟไลน์บนเครื่องด้วย Gemini Nano 4 (PREFER_ON_DEVICE) พร้อมสลับใช้ Cloud Gemini 3.8 Flash / 4 Carbon / 3.8 Live อัตโนมัติ</string>
+    <string name="ai_thinking_title">ที่ปรึกษาอาวุโส Hybrid AI (On-Device Preview + Cloud)</string>
+    <string name="ai_thinking_subtitle">ตั้งค่าเป้าหมาย OnDeviceModelOption.PREVIEW (PREFER_ON_DEVICE) พร้อมสลับใช้ Cloud Gemini 3.8 Flash / 4 Carbon / 3.8 Live อัตโนมัติ</string>
     <string name="offline_mode_label">Offline Site Mode</string>
 </resources>

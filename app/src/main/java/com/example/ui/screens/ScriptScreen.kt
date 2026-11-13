@@ -108,7 +108,7 @@ fun ScriptScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "คัดลอกข้อความส่ง LINE หรือให้ Hybrid AI (Gemini Nano 4 ออฟไลน์ / Cloud Fallback) ช่วยเกลาภาษาให้รัดกุมก่อนส่งทันที",
+                    text = "คัดลอกข้อความส่ง LINE หรือให้ Hybrid AI (AICore Preview On-Device / Cloud Fallback) ช่วยเกลาภาษาให้รัดกุมก่อนส่งทันที",
                     fontSize = 12.sp,
                     color = Color(0xFF9CA3AF)
                 )
@@ -342,7 +342,7 @@ private fun HybridTailoredScriptCard(
                     Column {
                         Text(
                             text = if (offlineSiteTestMode) {
-                                "กำลังปรับสคริปต์ด้วย Gemini Nano 4 (ONLY_ON_DEVICE)..."
+                                "กำลังเรียกประมวลผลบนอุปกรณ์ (ONLY_ON_DEVICE • PREVIEW)..."
                             } else {
                                 "Hybrid AI กำลังปรับสคริปต์ '${state.scriptTitle}'..."
                             },
@@ -351,7 +351,7 @@ private fun HybridTailoredScriptCard(
                             color = Color.White
                         )
                         Text(
-                            text = "โหมด: ${if (offlineSiteTestMode) "ONLY_ON_DEVICE" else "PREFER_ON_DEVICE (Nano -> Cloud)"}",
+                            text = "โหมด: ${if (offlineSiteTestMode) "ONLY_ON_DEVICE (PREVIEW)" else "PREFER_ON_DEVICE (PREVIEW -> Cloud)"}",
                             fontSize = 10.sp,
                             color = Color(0xFF9CA3AF)
                         )

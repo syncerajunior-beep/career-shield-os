@@ -40,15 +40,22 @@ import com.example.viewmodel.LastInferenceInfo
 fun InferenceSourcePill(
     source: HybridInferenceSource,
     detailLabel: String = "",
+    verifiedModelName: String? = null,
     modifier: Modifier = Modifier
 ) {
+    val onDeviceLabel = if (!verifiedModelName.isNullOrBlank()) {
+        "[On-Device: $verifiedModelName]"
+    } else {
+        "[On-Device: AICore]"
+    }
+
     val (bgColor, borderColor, textColor, icon, label) = when (source) {
         HybridInferenceSource.ON_DEVICE -> Quintuple(
             Color(0xFF00E676).copy(alpha = 0.16f),
             Color(0xFF00E676),
             Color(0xFF00E676),
             Icons.Default.Memory,
-            "[On-Device: Gemini Nano 4]"
+            onDeviceLabel
         )
         HybridInferenceSource.IN_CLOUD -> Quintuple(
             Color(0xFF00E5FF).copy(alpha = 0.15f),
@@ -62,7 +69,7 @@ fun InferenceSourcePill(
             Color(0xFF475569),
             Color(0xFFD1D5DB),
             Icons.Default.Memory,
-            "Hybrid: PREFER_ON_DEVICE"
+            "Hybrid: PREFER_ON_DEVICE (Preview)"
         )
     }
 
@@ -132,13 +139,14 @@ fun HybridStatusStrip(
                 InferenceSourcePill(
                     source = lastInference.source,
                     detailLabel = lastInference.featureLabel,
+                    verifiedModelName = lastInference.verifiedModelName,
                     modifier = Modifier.testTag("global_inference_source_pill")
                 )
                 Text(
                     text = if (offlineSiteTestMode) {
-                        "🚧 Offline Site Mode (ONLY_ON_DEVICE) • $onDeviceStatusLabel"
+                        "🚧 Offline Site (ONLY_ON_DEVICE • PREVIEW) • $onDeviceStatusLabel"
                     } else {
-                        "⚡ Hybrid (PREFER_ON_DEVICE) • $onDeviceStatusLabel"
+                        "⚡ Hybrid (PREFER_ON_DEVICE • PREVIEW) • $onDeviceStatusLabel"
                     },
                     fontSize = 10.sp,
                     color = if (offlineSiteTestMode) Color(0xFFFFB300) else Color(0xFF9CA3AF),

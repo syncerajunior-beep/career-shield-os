@@ -116,6 +116,11 @@ fun MainAppScreen(
     val lastInferenceState by viewModel.lastInferenceState.collectAsStateWithLifecycle()
     val onDeviceStatusLabel by viewModel.onDeviceStatusLabel.collectAsStateWithLifecycle()
     val isOnDeviceDownloadable by viewModel.isOnDeviceDownloadable.collectAsStateWithLifecycle()
+    val verifiedOnDeviceModelName by viewModel.verifiedOnDeviceModelName.collectAsStateWithLifecycle()
+    val deviceCompatibilitySummary by viewModel.deviceCompatibilitySummary.collectAsStateWithLifecycle()
+    val nanoDiagnosticState by viewModel.nanoDiagnosticState.collectAsStateWithLifecycle()
+    val materialSanityCheckState by viewModel.materialSanityCheckState.collectAsStateWithLifecycle()
+    val exceptionAudits by viewModel.exceptionAudits.collectAsStateWithLifecycle()
     val scriptTailorState by viewModel.scriptTailorState.collectAsStateWithLifecycle()
     val hybridOpsState by viewModel.hybridOpsState.collectAsStateWithLifecycle()
     val siteSafetyRiskState by viewModel.siteSafetyRiskState.collectAsStateWithLifecycle()
@@ -394,6 +399,11 @@ fun MainAppScreen(
                         offlineSiteTestMode = offlineSiteTestMode,
                         onDeviceStatusLabel = onDeviceStatusLabel,
                         isOnDeviceDownloadable = isOnDeviceDownloadable,
+                        verifiedOnDeviceModelName = verifiedOnDeviceModelName,
+                        deviceCompatibilitySummary = deviceCompatibilitySummary,
+                        nanoDiagnosticState = nanoDiagnosticState,
+                        materialSanityCheckState = materialSanityCheckState,
+                        exceptionAudits = exceptionAudits,
                         hybridOpsState = hybridOpsState,
                         siteSafetyRiskState = siteSafetyRiskState,
                         thinkingState = thinkingState,
@@ -404,6 +414,12 @@ fun MainAppScreen(
                         onDisableOfflineMode = { viewModel.setOfflineSiteTestMode(false) },
                         onRefreshOnDeviceStatus = viewModel::refreshOnDeviceStatus,
                         onDownloadOnDeviceModel = viewModel::downloadOnDeviceModel,
+                        onRunNanoDiagnostic = viewModel::runNano4PreviewDiagnostic,
+                        onClearNanoDiagnostic = viewModel::clearNanoDiagnostic,
+                        onRunMaterialSanityCheck = viewModel::runMaterialSanityCheck,
+                        onClearMaterialSanityCheck = viewModel::clearMaterialSanityCheck,
+                        onRecordExceptionAudit = viewModel::recordExceptionAudit,
+                        onDeleteExceptionAudit = viewModel::deleteExceptionAudit,
                         onSummarizeDailyLog = viewModel::summarizeDailyRemindLog,
                         onDetectDuplicateProgress = viewModel::detectDuplicateProgress,
                         onAskHybridSiteQa = viewModel::askHybridSiteQa,
