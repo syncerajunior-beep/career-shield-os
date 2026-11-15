@@ -3,6 +3,7 @@ name: Build Android Debug APK
 on:
   push:
     branches:
+      - main
       - mobile-apk-ci
       - firebase-apk-mainline
   workflow_dispatch:
