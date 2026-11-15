@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - mobile-apk-ci
+      - firebase-apk-mainline
   workflow_dispatch:
 
 permissions:
