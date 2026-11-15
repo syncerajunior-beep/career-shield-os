@@ -46,15 +46,59 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US" \
             -noprompt
 
-      - name: Add Firebase configuration when repository secret is available
+      - name: Add and validate Firebase configuration
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          FIREBASE_APPLET_CONFIG_XML: ${{ secrets.FIREBASE_APPLET_CONFIG_XML }}
         run: |
-          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
-            echo "Firebase configuration supplied for this build."
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+            echo "::error::Missing GOOGLE_SERVICES_JSON repository secret. Add the full app/google-services.json content in GitHub Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+          printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          config = json.loads(Path("app/google-services.json").read_text(encoding="utf-8"))
+          project_id = config.get("project_info", {}).get("project_id")
+          project_number = str(config.get("project_info", {}).get("project_number", ""))
+          expected_project_id = "gen-lang-client-0855749762"
+          expected_project_number = "132290729946"
+          expected_package = "com.aistudio.careershield.rkmvqz"
+
+          package_names = {
+              client.get("client_info", {}).get("android_client_info", {}).get("package_name")
+              for client in config.get("client", [])
+          }
+
+          if project_id != expected_project_id:
+              raise SystemExit(f"Wrong Firebase project_id: {project_id!r}")
+          if project_number != expected_project_number:
+              raise SystemExit(f"Wrong Firebase project_number: {project_number!r}")
+          if expected_package not in package_names:
+              raise SystemExit(
+                  f"google-services.json does not contain Android package {expected_package!r}; "
+                  f"found: {sorted(p for p in package_names if p)}"
+              )
+
+          print("Firebase project and Android package configuration validated.")
+          PY
+
+          if [ -n "$FIREBASE_APPLET_CONFIG_XML" ]; then
+            mkdir -p app/src/main/res/values
+            printf '%s' "$FIREBASE_APPLET_CONFIG_XML" > app/src/main/res/values/firebase_applet_config.xml
+            python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("app/src/main/res/values/firebase_applet_config.xml").getroot()
+          if root.tag != "resources":
+              raise SystemExit("firebase_applet_config.xml must have a <resources> root element.")
+          print("Firebase applet resource configuration validated.")
+          PY
           else
-            echo "::warning::GOOGLE_SERVICES_JSON is not configured. APK can be built for UI/local testing, but Firebase AI/Cloud features will not be configured."
+            echo "::notice::FIREBASE_APPLET_CONFIG_XML not provided. This Debug build can use Firebase AI Logic without Firestore database-ID or release reCAPTCHA resources; add the secret when those resources are needed."
           fi
 
       - name: Set up Gradle 9.3.1
