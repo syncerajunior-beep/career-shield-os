@@ -74,7 +74,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val database = AppDatabase.getDatabase(applicationContext)
-        val repository = CareerShieldRepository(database.taskDao())
+        val repository = CareerShieldRepository(database.taskDao(), database.inspectionDao())
         val aiRepository = GeminiAiRepository()
 
         setContent {
@@ -93,7 +93,9 @@ class MainActivity : ComponentActivity() {
 fun MainAppScreen(
     viewModel: CareerShieldViewModel = viewModel(
         factory = CareerShieldViewModel.provideFactory(
-            CareerShieldRepository(AppDatabase.getDatabase(LocalContext.current).taskDao()),
+            AppDatabase.getDatabase(LocalContext.current).let { db ->
+                CareerShieldRepository(db.taskDao(), db.inspectionDao())
+            },
             GeminiAiRepository()
         )
     )
@@ -121,6 +123,9 @@ fun MainAppScreen(
     val nanoDiagnosticState by viewModel.nanoDiagnosticState.collectAsStateWithLifecycle()
     val materialSanityCheckState by viewModel.materialSanityCheckState.collectAsStateWithLifecycle()
     val exceptionAudits by viewModel.exceptionAudits.collectAsStateWithLifecycle()
+    val riskReports by viewModel.riskReports.collectAsStateWithLifecycle()
+    val checklistsWithItems by viewModel.checklistsWithItems.collectAsStateWithLifecycle()
+    val openCriticalReportCount by viewModel.openCriticalReportCount.collectAsStateWithLifecycle()
     val scriptTailorState by viewModel.scriptTailorState.collectAsStateWithLifecycle()
     val hybridOpsState by viewModel.hybridOpsState.collectAsStateWithLifecycle()
     val siteSafetyRiskState by viewModel.siteSafetyRiskState.collectAsStateWithLifecycle()
@@ -431,7 +436,17 @@ fun MainAppScreen(
                         onSaveActionPackToRoom = viewModel::saveGeneratedPackToRoom,
                         onSendChatMessage = viewModel::sendChatMessage,
                         onClearChat = viewModel::clearChatHistory,
-                        onToggleLiveVoice = viewModel::toggleLiveVoiceSession
+                        onToggleLiveVoice = viewModel::toggleLiveVoiceSession,
+                        riskReports = riskReports,
+                        checklistsWithItems = checklistsWithItems,
+                        openCriticalReportCount = openCriticalReportCount,
+                        onSaveSiteSafetyRiskReport = viewModel::saveSiteSafetyRiskReport,
+                        onCreateRiskReport = viewModel::createRiskAssessmentReport,
+                        onUpdateRiskReportStatus = viewModel::updateRiskReportStatus,
+                        onDeleteRiskReport = viewModel::deleteRiskReport,
+                        onCreateInspectionChecklist = viewModel::createInspectionChecklist,
+                        onSetInspectionItemResult = viewModel::setInspectionItemResult,
+                        onDeleteInspectionChecklist = viewModel::deleteInspectionChecklist
                     )
                 }
             }

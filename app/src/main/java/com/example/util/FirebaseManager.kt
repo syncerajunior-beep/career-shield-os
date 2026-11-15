@@ -8,6 +8,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
+import com.google.firebase.appcheck.recaptcha.RecaptchaAppCheckProviderFactory
 
 /**
  * Central Firebase initialization manager that configures FirebaseAppCheck before
@@ -15,7 +16,8 @@ import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderF
  *
  * - Local development (BuildConfig.DEBUG): installs DebugAppCheckProviderFactory and
  *   synchronously persists any launch-Intent FIREBASE_APPCHECK_DEBUG_TOKEN before factory install.
- * - Production builds (!BuildConfig.DEBUG): installs PlayIntegrityAppCheckProviderFactory.
+ * - Production builds (!BuildConfig.DEBUG): installs RecaptchaAppCheckProviderFactory using
+ *   the provisioned `recaptcha_site_key` resource (falling back to PlayIntegrityAppCheckProviderFactory).
  */
 object FirebaseManager {
 
@@ -23,6 +25,7 @@ object FirebaseManager {
     private const val DEBUG_TOKEN_EXTRA = "FIREBASE_APPCHECK_DEBUG_TOKEN"
     private const val DEBUG_STORE_PREFIX = "com.google.firebase.appcheck.debug.store."
     private const val DEBUG_SECRET_KEY = "com.google.firebase.appcheck.debug.DEBUG_SECRET"
+    private const val RECAPTCHA_SITE_KEY_RES = "recaptcha_site_key"
 
     @Volatile
     private var appCheckInitialized: Boolean = false
@@ -57,10 +60,23 @@ object FirebaseManager {
                 )
                 Log.d(TAG, "DebugAppCheckProviderFactory installed for local development.")
             } else {
-                FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
-                    PlayIntegrityAppCheckProviderFactory.getInstance()
+                val resId = appContext.resources.getIdentifier(
+                    RECAPTCHA_SITE_KEY_RES,
+                    "string",
+                    appContext.packageName
                 )
-                Log.d(TAG, "PlayIntegrityAppCheckProviderFactory installed for production build.")
+                val siteKey = if (resId != 0) appContext.getString(resId) else ""
+                if (siteKey.isNotBlank()) {
+                    FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
+                        RecaptchaAppCheckProviderFactory.getInstance(siteKey)
+                    )
+                    Log.d(TAG, "RecaptchaAppCheckProviderFactory installed for production build.")
+                } else {
+                    FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
+                        PlayIntegrityAppCheckProviderFactory.getInstance()
+                    )
+                    Log.d(TAG, "PlayIntegrityAppCheckProviderFactory installed for production build.")
+                }
             }
             appCheckInitialized = true
         } catch (e: Exception) {

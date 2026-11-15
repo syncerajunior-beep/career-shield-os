@@ -1,14 +1,39 @@
 package com.example.data
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 
-class CareerShieldRepository(private val taskDao: TaskDao) {
+class CareerShieldRepository(
+    private val taskDao: TaskDao,
+    private val inspectionDao: InspectionDao? = null
+) {
     val allTasks: Flow<List<TaskEntity>> = taskDao.getAllTasks()
     val allScripts: Flow<List<ScriptEntity>> = taskDao.getAllScripts()
     val allExceptionAudits: Flow<List<ExceptionAuditEntity>> = taskDao.getAllExceptionAudits()
 
+    val allRiskReports: Flow<List<RiskAssessmentReportEntity>> =
+        inspectionDao?.getAllRiskReports() ?: flowOf(emptyList())
+
+    val allChecklistsWithItems: Flow<List<ChecklistWithItems>> =
+        inspectionDao?.getAllChecklistsWithItems() ?: flowOf(emptyList())
+
+    val allReportsWithChecklists: Flow<List<ReportWithChecklists>> =
+        inspectionDao?.getReportsWithChecklists() ?: flowOf(emptyList())
+
+    val openCriticalReportCount: Flow<Int> =
+        inspectionDao?.observeOpenCriticalReportCount() ?: flowOf(0)
+
     fun getFilteredTasks(category: String, searchQuery: String): Flow<List<TaskEntity>> =
         taskDao.getFilteredTasks(category, searchQuery.trim())
+
+    fun getFilteredRiskReports(
+        reportType: String = "ALL",
+        severityLevel: String = "ALL",
+        status: String = "ALL",
+        searchQuery: String = ""
+    ): Flow<List<RiskAssessmentReportEntity>> =
+        inspectionDao?.getFilteredRiskReports(reportType, severityLevel, status, searchQuery.trim())
+            ?: flowOf(emptyList())
 
     suspend fun insertTask(task: TaskEntity) = taskDao.insertTask(task)
 
@@ -27,6 +52,50 @@ class CareerShieldRepository(private val taskDao: TaskDao) {
     suspend fun insertExceptionAudit(audit: ExceptionAuditEntity) = taskDao.insertExceptionAudit(audit)
 
     suspend fun deleteExceptionAudit(audit: ExceptionAuditEntity) = taskDao.deleteExceptionAudit(audit)
+
+    suspend fun insertRiskReport(report: RiskAssessmentReportEntity): Long {
+        return inspectionDao?.insertRiskReport(report) ?: -1L
+    }
+
+    suspend fun updateRiskReportStatus(reportId: Long, newStatus: String) {
+        inspectionDao?.updateRiskReportStatus(reportId, newStatus)
+    }
+
+    suspend fun deleteRiskReport(report: RiskAssessmentReportEntity) {
+        inspectionDao?.deleteRiskReport(report)
+    }
+
+    suspend fun insertChecklistWithItems(
+        checklist: InspectionChecklistEntity,
+        items: List<InspectionChecklistItemEntity>
+    ): Long {
+        return inspectionDao?.insertChecklistWithItems(checklist, items) ?: -1L
+    }
+
+    suspend fun updateChecklistItemResult(
+        checklistId: Long,
+        itemId: Long,
+        resultStatus: String,
+        remarks: String = ""
+    ) {
+        val dao = inspectionDao ?: return
+        dao.updateChecklistItemResult(
+            itemId = itemId,
+            resultStatus = resultStatus,
+            remarks = remarks
+        )
+        val items = dao.getItemsForChecklistOnce(checklistId)
+        val recomputedStatus = when {
+            items.any { it.resultStatus == "FAIL" } -> "FAILED_HOLD"
+            items.isNotEmpty() && items.all { it.resultStatus == "PASS" || it.resultStatus == "NA" } -> "PASSED"
+            else -> "PENDING"
+        }
+        dao.updateChecklistOverallStatus(checklistId, recomputedStatus)
+    }
+
+    suspend fun deleteChecklist(checklist: InspectionChecklistEntity) {
+        inspectionDao?.deleteChecklist(checklist)
+    }
 
     suspend fun ensureSeedData() {
         if (taskDao.getTaskCount() == 0) {
@@ -98,6 +167,79 @@ class CareerShieldRepository(private val taskDao: TaskDao) {
                 )
             )
             taskDao.insertAllScripts(defaultScripts)
+        }
+
+        val dao = inspectionDao
+        if (dao != null && dao.getChecklistCount() == 0) {
+            dao.insertChecklistWithItems(
+                checklist = InspectionChecklistEntity(
+                    checklistCode = "CHK-SAFETY-001",
+                    title = "ตรวจนั่งร้าน & การทำงานบนที่สูง (>= 2 เมตร)",
+                    tradeCategory = "SAFETY",
+                    siteZone = "Zone A / ชั้น 4-5",
+                    inspectorName = "จป. / ผจก.โครงการ",
+                    overallStatus = "PENDING",
+                    notes = "ตรวจตามกฎกระทรวงความปลอดภัยงานก่อสร้าง พ.ศ. 2564"
+                ),
+                items = listOf(
+                    InspectionChecklistItemEntity(
+                        checklistId = 0L,
+                        sequenceOrder = 1,
+                        itemTitle = "ติดตั้งราวกันตกสูง 90-110 ซม. และแผ่นกันตก (Toe Board)",
+                        standardReference = "STD-SAFETY-2564",
+                        isCriticalStopWork = true
+                    ),
+                    InspectionChecklistItemEntity(
+                        checklistId = 0L,
+                        sequenceOrder = 2,
+                        itemTitle = "ติดป้ายตรวจรับรองนั่งร้าน (Green Tag) และตรวจสอบฐานรองรับ",
+                        standardReference = "STD-SAFETY-2564",
+                        isCriticalStopWork = true
+                    ),
+                    InspectionChecklistItemEntity(
+                        checklistId = 0L,
+                        sequenceOrder = 3,
+                        itemTitle = "คนงานสวม Safety Harness 100% Tie-off ตลอดเวลา",
+                        standardReference = "STD-SAFETY-2564",
+                        isCriticalStopWork = true
+                    )
+                )
+            )
+
+            dao.insertChecklistWithItems(
+                checklist = InspectionChecklistEntity(
+                    checklistCode = "CHK-POUR-002",
+                    title = "ตรวจรับแบบหล่อ & เหล็กเสริมก่อนเทคอนกรีต (Pre-Pour)",
+                    tradeCategory = "STRUCTURAL",
+                    siteZone = "คาน/พื้นชั้น 2",
+                    inspectorName = "วิศวกรสนาม",
+                    overallStatus = "PENDING",
+                    notes = "ต้องตรวจผ่านก่อนรถโม่คอนกรีตเข้าเท (SLA 4 ชม.)"
+                ),
+                items = listOf(
+                    InspectionChecklistItemEntity(
+                        checklistId = 0L,
+                        sequenceOrder = 1,
+                        itemTitle = "ตรวจสอบขนาดเหล็กเสริม ระยะทาบ และลูกปูนหนุนเหล็ก (Covering)",
+                        standardReference = "STD-CONCRETE-MIX",
+                        isCriticalStopWork = true
+                    ),
+                    InspectionChecklistItemEntity(
+                        checklistId = 0L,
+                        sequenceOrder = 2,
+                        itemTitle = "ค้ำยัน (Shoring) และรอยต่อแบบหล่อแน่นหนาไม่รั่วซึม",
+                        standardReference = "STD-CONCRETE-MIX",
+                        isCriticalStopWork = true
+                    ),
+                    InspectionChecklistItemEntity(
+                        checklistId = 0L,
+                        sequenceOrder = 3,
+                        itemTitle = "ผล Slump Test และกำลังอัดทรงกระบอกตรงตามสเปก (240-280 ksc)",
+                        standardReference = "STD-CONCRETE-MIX",
+                        isCriticalStopWork = false
+                    )
+                )
+            )
         }
     }
 }

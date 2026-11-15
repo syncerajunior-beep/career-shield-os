@@ -7,11 +7,15 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.AiInferenceOrigin
 import com.example.data.CareerShieldRepository
+import com.example.data.ChecklistWithItems
 import com.example.data.ExceptionAuditEntity
 import com.example.data.GeminiAiRepository
+import com.example.data.InspectionChecklistEntity
+import com.example.data.InspectionChecklistItemEntity
 import com.example.data.MaterialSanityCheckResult
 import com.example.data.Nano4DiagnosticResult
 import com.example.data.NanoDiagnosticLanguage
+import com.example.data.RiskAssessmentReportEntity
 import com.example.data.ScriptEntity
 import com.example.data.TaskEntity
 import com.example.util.SitePhotoStorage
@@ -258,6 +262,27 @@ class CareerShieldViewModel(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
+        )
+
+    val riskReports: StateFlow<List<RiskAssessmentReportEntity>> = repository.allRiskReports
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val checklistsWithItems: StateFlow<List<ChecklistWithItems>> = repository.allChecklistsWithItems
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val openCriticalReportCount: StateFlow<Int> = repository.openCriticalReportCount
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 0
         )
 
     private val _offlineSiteTestMode = MutableStateFlow(false)
@@ -614,6 +639,150 @@ class CareerShieldViewModel(
             category = "SAFETY",
             timeSlot = currentSlot
         )
+    }
+
+    fun saveSiteSafetyRiskReport(
+        siteZone: String,
+        hazardInput: String,
+        analysis: String,
+        severityLevel: String = "HIGH",
+        inferenceSource: HybridInferenceSource = HybridInferenceSource.IN_CLOUD
+    ) {
+        val trimmedHazard = hazardInput.trim()
+        if (trimmedHazard.isEmpty()) return
+        viewModelScope.launch {
+            val timestamp = System.currentTimeMillis()
+            val codeSuffix = SimpleDateFormat("MMddHHmmss", Locale.US).format(Date(timestamp))
+            val origin = when (inferenceSource) {
+                HybridInferenceSource.ON_DEVICE -> "ON_DEVICE"
+                HybridInferenceSource.IN_CLOUD -> "IN_CLOUD"
+                HybridInferenceSource.STANDBY -> "MANUAL"
+            }
+            val inferredSeverity = when {
+                analysis.contains("CRITICAL", ignoreCase = true) ||
+                    analysis.contains("หยุดงาน", ignoreCase = true) ||
+                    analysis.contains("STOP", ignoreCase = true) -> "CRITICAL"
+                else -> severityLevel
+            }
+            repository.insertRiskReport(
+                RiskAssessmentReportEntity(
+                    reportCode = "RPT-SAFE-$codeSuffix",
+                    siteZone = siteZone.trim().ifBlank { "พื้นที่หน้างานหลัก" },
+                    reportType = "SITE_SAFETY",
+                    severityLevel = inferredSeverity,
+                    hazardSummary = trimmedHazard.take(180),
+                    assessmentFindings = analysis.trim(),
+                    mitigationPlan = "ดำเนินการแก้ไขตามมาตรการความปลอดภัยและตรวจสอบ PPE ก่อนอนุญาตให้ทำงานต่อ",
+                    inferenceOrigin = origin,
+                    status = if (inferredSeverity == "CRITICAL") "STOP_WORK" else "OPEN",
+                    createdAt = timestamp,
+                    updatedAt = timestamp
+                )
+            )
+        }
+    }
+
+    fun createRiskAssessmentReport(
+        siteZone: String,
+        reportType: String,
+        severityLevel: String,
+        hazardSummary: String,
+        assessmentFindings: String,
+        mitigationPlan: String,
+        inspectorName: String = "Site Risk Manager"
+    ) {
+        if (hazardSummary.isBlank()) return
+        viewModelScope.launch {
+            val timestamp = System.currentTimeMillis()
+            val codeSuffix = SimpleDateFormat("MMddHHmmss", Locale.US).format(Date(timestamp))
+            repository.insertRiskReport(
+                RiskAssessmentReportEntity(
+                    reportCode = "RPT-${reportType.take(4).uppercase(Locale.US)}-$codeSuffix",
+                    siteZone = siteZone.trim().ifBlank { "พื้นที่หน้างานหลัก" },
+                    reportType = reportType,
+                    severityLevel = severityLevel,
+                    hazardSummary = hazardSummary.trim(),
+                    assessmentFindings = assessmentFindings.trim().ifBlank { hazardSummary.trim() },
+                    mitigationPlan = mitigationPlan.trim().ifBlank { "เฝ้าระวังและตรวจสอบซ้ำตามรอบงาน" },
+                    inspectorName = inspectorName.trim().ifBlank { "Site Risk Manager" },
+                    inferenceOrigin = "MANUAL",
+                    status = if (severityLevel == "CRITICAL") "STOP_WORK" else "OPEN",
+                    createdAt = timestamp,
+                    updatedAt = timestamp
+                )
+            )
+        }
+    }
+
+    fun updateRiskReportStatus(reportId: Long, newStatus: String) {
+        viewModelScope.launch {
+            repository.updateRiskReportStatus(reportId, newStatus)
+        }
+    }
+
+    fun deleteRiskReport(report: RiskAssessmentReportEntity) {
+        viewModelScope.launch {
+            repository.deleteRiskReport(report)
+        }
+    }
+
+    fun createInspectionChecklist(
+        title: String,
+        tradeCategory: String,
+        siteZone: String,
+        itemTitles: List<String>,
+        linkedReportId: Long? = null,
+        inspectorName: String = "Site Engineer"
+    ) {
+        val cleanItems = itemTitles.map { it.trim() }.filter { it.isNotEmpty() }
+        if (title.isBlank() || cleanItems.isEmpty()) return
+        viewModelScope.launch {
+            val timestamp = System.currentTimeMillis()
+            val codeSuffix = SimpleDateFormat("MMddHHmmss", Locale.US).format(Date(timestamp))
+            val checklist = InspectionChecklistEntity(
+                checklistCode = "CHK-${tradeCategory.take(4).uppercase(Locale.US)}-$codeSuffix",
+                title = title.trim(),
+                tradeCategory = tradeCategory,
+                siteZone = siteZone.trim().ifBlank { "พื้นที่หน้างานหลัก" },
+                inspectorName = inspectorName.trim().ifBlank { "Site Engineer" },
+                linkedReportId = linkedReportId,
+                overallStatus = "PENDING",
+                inspectedAt = timestamp
+            )
+            val itemEntities = cleanItems.mapIndexed { index, itemTitle ->
+                InspectionChecklistItemEntity(
+                    checklistId = 0L,
+                    sequenceOrder = index + 1,
+                    itemTitle = itemTitle,
+                    standardReference = "SITE-QAQC",
+                    resultStatus = "PENDING",
+                    isCriticalStopWork = tradeCategory == "SAFETY" || tradeCategory == "STRUCTURAL"
+                )
+            }
+            repository.insertChecklistWithItems(checklist, itemEntities)
+        }
+    }
+
+    fun setInspectionItemResult(
+        checklistId: Long,
+        itemId: Long,
+        resultStatus: String,
+        remarks: String = ""
+    ) {
+        viewModelScope.launch {
+            repository.updateChecklistItemResult(
+                checklistId = checklistId,
+                itemId = itemId,
+                resultStatus = resultStatus,
+                remarks = remarks
+            )
+        }
+    }
+
+    fun deleteInspectionChecklist(checklist: InspectionChecklistEntity) {
+        viewModelScope.launch {
+            repository.deleteChecklist(checklist)
+        }
     }
 
     // Hybrid Use Case 1: Fast On-Device / Hybrid SOS Script Tailoring (VO / EOT / Safety notices)

@@ -93,9 +93,13 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.R
 import com.example.data.CertifiedBaselineData
+import com.example.data.ChecklistWithItems
 import com.example.data.ExceptionAuditEntity
+import com.example.data.InspectionChecklistEntity
 import com.example.data.NanoDiagnosticLanguage
+import com.example.data.RiskAssessmentReportEntity
 import com.example.ui.components.InferenceSourcePill
+import com.example.ui.components.RiskInspectionRoomPanel
 import com.example.viewmodel.AiGeneratorUiState
 import com.example.viewmodel.AiThinkingUiState
 import com.example.viewmodel.ChatMessage
@@ -155,7 +159,17 @@ fun AiAdvisorScreen(
     onSaveActionPackToRoom: (GeneratedActionPack) -> Unit,
     onSendChatMessage: (String) -> Unit,
     onClearChat: () -> Unit,
-    onToggleLiveVoice: () -> Unit
+    onToggleLiveVoice: () -> Unit,
+    riskReports: List<RiskAssessmentReportEntity> = emptyList(),
+    checklistsWithItems: List<ChecklistWithItems> = emptyList(),
+    openCriticalReportCount: Int = 0,
+    onSaveSiteSafetyRiskReport: (String, String, String, String, HybridInferenceSource) -> Unit = { _, _, _, _, _ -> },
+    onCreateRiskReport: (String, String, String, String, String, String) -> Unit = { _, _, _, _, _, _ -> },
+    onUpdateRiskReportStatus: (Long, String) -> Unit = { _, _ -> },
+    onDeleteRiskReport: (RiskAssessmentReportEntity) -> Unit = {},
+    onCreateInspectionChecklist: (String, String, String, List<String>, Long?) -> Unit = { _, _, _, _, _ -> },
+    onSetInspectionItemResult: (Long, Long, String) -> Unit = { _, _, _ -> },
+    onDeleteInspectionChecklist: (InspectionChecklistEntity) -> Unit = {}
 ) {
     // 0 = Hybrid Ops (Preview Target + Cloud), 1 = Chatbot, 2 = Live Voice, 3 = High Thinking & Pack
     var activeSubTab by rememberSaveable { mutableIntStateOf(0) }
@@ -356,13 +370,23 @@ fun AiAdvisorScreen(
                 onClearNanoDiagnostic = onClearNanoDiagnostic,
                 onSummarizeDailyLog = onSummarizeDailyLog,
                 onDetectDuplicateProgress = onDetectDuplicateProgress,
-                onAskHybridQa = {
+                    onAskHybridQa = {
                     if (hybridQaInput.isNotBlank()) {
                         onAskHybridSiteQa(hybridQaInput)
                         hybridQaInput = ""
                     }
                 },
-                onDisableOfflineMode = onDisableOfflineMode
+                onDisableOfflineMode = onDisableOfflineMode,
+                riskReports = riskReports,
+                checklistsWithItems = checklistsWithItems,
+                openCriticalReportCount = openCriticalReportCount,
+                onSaveSiteSafetyRiskReport = onSaveSiteSafetyRiskReport,
+                onCreateRiskReport = onCreateRiskReport,
+                onUpdateRiskReportStatus = onUpdateRiskReportStatus,
+                onDeleteRiskReport = onDeleteRiskReport,
+                onCreateInspectionChecklist = onCreateInspectionChecklist,
+                onSetInspectionItemResult = onSetInspectionItemResult,
+                onDeleteInspectionChecklist = onDeleteInspectionChecklist
             )
             1 -> MultiTurnChatSubScreen(
                 context = context,
@@ -449,7 +473,17 @@ private fun HybridOpsSubScreen(
     onSummarizeDailyLog: () -> Unit,
     onDetectDuplicateProgress: () -> Unit,
     onAskHybridQa: () -> Unit,
-    onDisableOfflineMode: () -> Unit
+    onDisableOfflineMode: () -> Unit,
+    riskReports: List<RiskAssessmentReportEntity>,
+    checklistsWithItems: List<ChecklistWithItems>,
+    openCriticalReportCount: Int,
+    onSaveSiteSafetyRiskReport: (String, String, String, String, HybridInferenceSource) -> Unit,
+    onCreateRiskReport: (String, String, String, String, String, String) -> Unit,
+    onUpdateRiskReportStatus: (Long, String) -> Unit,
+    onDeleteRiskReport: (RiskAssessmentReportEntity) -> Unit,
+    onCreateInspectionChecklist: (String, String, String, List<String>, Long?) -> Unit,
+    onSetInspectionItemResult: (Long, Long, String) -> Unit,
+    onDeleteInspectionChecklist: (InspectionChecklistEntity) -> Unit
 ) {
     val auditDateFormatter = remember { SimpleDateFormat("dd/MM HH:mm", Locale.US) }
     val safetyPresets = listOf(
@@ -1259,6 +1293,41 @@ private fun HybridOpsSubScreen(
                                     Text("เพิ่มเข้าเช็กลิสต์", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                                 }
                             }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    onSaveSiteSafetyRiskReport(
+                                        "พื้นที่หน้างานตามรายงาน Safety AI",
+                                        siteSafetyRiskState.hazardInput,
+                                        siteSafetyRiskState.analysis,
+                                        "HIGH",
+                                        siteSafetyRiskState.inferenceSource
+                                    )
+                                    Toast.makeText(
+                                        context,
+                                        "บันทึกลงฐานข้อมูล Risk Report (Room DB) แล้ว!",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("save_safety_risk_report_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SaveAlt,
+                                    contentDescription = "บันทึกผลวิเคราะห์ลง Risk Assessment Report",
+                                    tint = Color(0xFFFFAB91),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "บันทึกลง Risk Report (Room v4)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFFAB91)
+                                )
+                            }
                         }
                     }
                 }
@@ -1843,6 +1912,21 @@ private fun HybridOpsSubScreen(
                     }
                 }
             }
+        }
+
+        // 9. Room v4 Construction Risk Reports & Relational Inspection Checklists
+        item {
+            RiskInspectionRoomPanel(
+                riskReports = riskReports,
+                checklistsWithItems = checklistsWithItems,
+                openCriticalReportCount = openCriticalReportCount,
+                onCreateRiskReport = onCreateRiskReport,
+                onUpdateRiskReportStatus = onUpdateRiskReportStatus,
+                onDeleteRiskReport = onDeleteRiskReport,
+                onCreateInspectionChecklist = onCreateInspectionChecklist,
+                onSetInspectionItemResult = onSetInspectionItemResult,
+                onDeleteInspectionChecklist = onDeleteInspectionChecklist
+            )
         }
     }
 }
