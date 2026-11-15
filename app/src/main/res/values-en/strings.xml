@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">NANO 4oK</string>
+    <string name="header_title">NANO 4oK</string>
+    <string name="header_subtitle">Home Inspector &amp; Site Intelligence</string>
+    <string name="tab_site_walk">Site Walk</string>
+    <string name="tab_report_email">Report &amp; Email</string>
+    <string name="btn_copy">Copy</string>
+    <string name="btn_share">Share</string>
+    <string name="toast_copied">Copied to clipboard!</string>
+    <string name="offline_mode_label">Offline Mode</string>
+</resources>

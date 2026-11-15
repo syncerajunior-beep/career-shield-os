@@ -5,7 +5,8 @@ import kotlinx.coroutines.flow.flowOf
 
 class CareerShieldRepository(
     private val taskDao: TaskDao,
-    private val inspectionDao: InspectionDao? = null
+    private val inspectionDao: InspectionDao? = null,
+    private val siteWalkDefectDao: SiteWalkDefectDao? = null
 ) {
     val allTasks: Flow<List<TaskEntity>> = taskDao.getAllTasks()
     val allScripts: Flow<List<ScriptEntity>> = taskDao.getAllScripts()
@@ -22,6 +23,27 @@ class CareerShieldRepository(
 
     val openCriticalReportCount: Flow<Int> =
         inspectionDao?.observeOpenCriticalReportCount() ?: flowOf(0)
+
+    val allSiteWalkDefects: Flow<List<SiteWalkDefectEntity>> =
+        siteWalkDefectDao?.getAllDefects() ?: flowOf(emptyList())
+
+    val openSiteWalkDefectCount: Flow<Int> =
+        siteWalkDefectDao?.observeOpenDefectCount() ?: flowOf(0)
+
+    suspend fun getNextDefectPinNumber(): Int =
+        (siteWalkDefectDao?.getMaxPinNumber() ?: 0) + 1
+
+    suspend fun insertSiteWalkDefect(defect: SiteWalkDefectEntity): Long {
+        return siteWalkDefectDao?.insertDefect(defect) ?: -1L
+    }
+
+    suspend fun updateSiteWalkDefectStatus(defectId: Long, newStatus: String) {
+        siteWalkDefectDao?.updateDefectStatus(defectId, newStatus)
+    }
+
+    suspend fun deleteSiteWalkDefect(defect: SiteWalkDefectEntity) {
+        siteWalkDefectDao?.deleteDefect(defect)
+    }
 
     fun getFilteredTasks(category: String, searchQuery: String): Flow<List<TaskEntity>> =
         taskDao.getFilteredTasks(category, searchQuery.trim())

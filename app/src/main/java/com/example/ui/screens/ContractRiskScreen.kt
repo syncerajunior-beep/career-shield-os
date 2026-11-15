@@ -39,7 +39,6 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BookmarkAdd
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ExpandLess
@@ -78,16 +77,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
-import com.example.R
 import com.example.data.TaskEntity
+import com.example.ui.components.AppCheckDebugTokenBanner
 import com.example.ui.components.InferenceSourcePill
+import com.example.ui.localization.AppLanguage
+import com.example.ui.localization.LocalAppLanguage
+import com.example.ui.localization.LocalAppStrings
+import com.example.ui.localization.LocalizedSeedMapper
+import com.example.ui.localization.appStrings
 import com.example.util.SitePhotoStorage
 import com.example.viewmodel.ContractRiskUiState
 import com.example.viewmodel.GroundingSource
@@ -109,29 +112,67 @@ fun ContractRiskScreen(
     onSaveAnalysisAsSosScript: (title: String, content: String) -> Unit,
     onDiscussInChat: (String) -> Unit
 ) {
+    val lang = LocalAppLanguage.current
+    val s = LocalAppStrings.current
+
     // 0 = Contract Clause LD Scanner, 1 = Site Photo Risk Inspection (Cloud Multimodal)
     var activeScannerMode by rememberSaveable { mutableIntStateOf(0) }
 
-    var clauseText by rememberSaveable {
-        mutableStateOf(
-            "ข้อ 14. ค่าปรับกรณีงานล่าช้า (Liquidated Damages): หากผู้รับจ้างส่งมอบงานล่าช้ากว่ากำหนดในสัญญา ผู้รับจ้างยินยอมให้ผู้ว่าจ้างปรับเป็นรายวันในอัตราวันละ 0.25% ของมูลค่างานตามสัญญาทั้งหมด (คิดเป็นวันละ 150,000 บาท) โดยไม่มีเพดานสูงสุด และผู้รับจ้างตกลงสละสิทธิ์การขอขยายเวลาก่อสร้าง (EOT) จากเหตุฝนตกหรือการส่งมอบพื้นที่ล่าช้าทุกกรณี"
-        )
-    }
+    var clauseText by rememberSaveable { mutableStateOf(s.defaultClauseText) }
     var useDeepThinking by rememberSaveable { mutableStateOf(false) }
     var showThoughts by rememberSaveable { mutableStateOf(true) }
 
     var selectedPhotoUri by rememberSaveable { mutableStateOf("") }
-    var photoFocusNote by rememberSaveable {
-        mutableStateOf("ตรวจความเสี่ยงความปลอดภัย โครงสร้างเหล็ก/คอนกรีต และหลักฐานเพื่อขอ VO หรือป้องกันค่าปรับ LD")
-    }
+    var photoFocusNote by rememberSaveable { mutableStateOf(s.defaultPhotoFocusNote) }
     var pendingCaptureUri by remember { mutableStateOf<Uri?>(null) }
+
+    val sampleClauses = remember(lang) {
+        if (lang == AppLanguage.EN) {
+            listOf(
+                "LD 150k/day Uncapped" to
+                    "Clause 14. Liquidated Damages (LD): If the Contractor fails to complete the Works by the Time for Completion, the Contractor shall pay Liquidated Damages at 0.25% of the total Contract Price per day (150,000 THB/day) with no maximum cap, and the Contractor waives all rights to claim any Extension of Time (EOT) arising from inclement weather or late site handover.",
+                "Verbal Change Order Before VO" to
+                    "Clause 9. Variation Orders: The Employer or Supervising Engineer may verbally order site modifications at any time, and the Contractor must complete all modified works prior to submitting cost or schedule adjustment requests for retrospective VO approval.",
+                "Strict 3-Day EOT Bar" to
+                    "Clause 18. Extension of Time (EOT): The Contractor may claim EOT solely for officially declared natural disasters, provided written notice is served within 3 days of the event; otherwise all claims for time extension and prolongation cost are permanently waived.",
+                "Pay-When-Paid + 10% Retention" to
+                    "Clause 7. Payment Terms: Main Contractor shall release subcontractor progress payments strictly within 45 days after receiving corresponding funds from the Project Owner, subject to 10% Retention withheld across every interim certificate."
+            )
+        } else {
+            listOf(
+                "ค่าปรับ LD วันละ 1.5 แสน ไม่จำกัดเพดาน" to
+                    "ข้อ 14. ค่าปรับกรณีงานล่าช้า (Liquidated Damages): หากผู้รับจ้างส่งมอบงานล่าช้ากว่ากำหนดในสัญญา ผู้รับจ้างยินยอมให้ผู้ว่าจ้างปรับเป็นรายวันในอัตราวันละ 0.25% ของมูลค่างานตามสัญญาทั้งหมด (คิดเป็นวันละ 150,000 บาท) โดยไม่มีเพดานสูงสุด และผู้รับจ้างตกลงสละสิทธิ์การขอขยายเวลาก่อสร้าง (EOT) จากเหตุฝนตกหรือการส่งมอบพื้นที่ล่าช้าทุกกรณี",
+                "สั่งแก้งานปากเปล่าก่อนค่อยเบิก VO" to
+                    "ข้อ 9. การแก้ไขเปลี่ยนแปลงงาน (Variation Order): ผู้ว่าจ้างหรือวิศวกรผู้ควบคุมงานมีสิทธิ์สั่งแก้ไขเปลี่ยนแปลงรายละเอียดงานหน้างานด้วยวาจาได้ทันที และผู้รับจ้างต้องดำเนินการให้เสร็จสิ้นก่อนจึงจะมีสิทธิ์ยื่นขออนุมัติงบประมาณและระยะเวลาเพิ่มเติมภายหลัง",
+                "แจ้ง EOT ภายใน 3 วัน มิฉะนั้นสละสิทธิ์" to
+                    "ข้อ 18. การขอขยายระยะเวลาก่อสร้าง (EOT): ผู้รับจ้างมีสิทธิ์ขอขยายเวลาก่อสร้างเฉพาะเหตุภัยพิบัติที่ทางราชการประกาศเท่านั้น ทั้งนี้ต้องทำหนังสือแจ้งภายใน 3 วันนับแต่วันเกิดเหตุ มิฉะนั้นถือว่าผู้รับจ้างสละสิทธิ์เรียกร้องเวลาและค่าใช้จ่ายใดๆ ทั้งสิ้น",
+                "Pay-when-Paid จ่ายเมื่อเจ้าของจ่าย" to
+                    "ข้อ 7. เงื่อนไขการชำระเงินงวดงาน: ผู้รับเหมาหลักจะชำระค่างวดงานให้แก่ผู้รับเหมาช่วงภายใน 45 วันนับตั้งแต่วันที่ผู้รับเหมาหลักได้รับเงินงวดนั้นจากเจ้าของโครงการแล้วเท่านั้น พร้อมหักเงินประกันผลงาน (Retention) ร้อยละ 10 ของทุกงวด"
+            )
+        }
+    }
+
+    LaunchedEffect(lang) {
+        val otherLang = if (lang == AppLanguage.TH) AppLanguage.EN else AppLanguage.TH
+        val otherStrings = appStrings(otherLang)
+        if (clauseText == otherStrings.defaultClauseText) {
+            clauseText = s.defaultClauseText
+        }
+        if (photoFocusNote == otherStrings.defaultPhotoFocusNote) {
+            photoFocusNote = s.defaultPhotoFocusNote
+        }
+    }
 
     LaunchedEffect(initialInspectPhotoUri) {
         if (initialInspectPhotoUri.isNotBlank()) {
             activeScannerMode = 1
             selectedPhotoUri = initialInspectPhotoUri
             if (initialInspectTaskTitle.isNotBlank()) {
-                photoFocusNote = "ตรวจสอบจุดเสี่ยงจากภารกิจ: $initialInspectTaskTitle"
+                photoFocusNote = if (lang == AppLanguage.EN) {
+                    "Inspect hazard evidence from checkpoint: $initialInspectTaskTitle"
+                } else {
+                    "ตรวจสอบจุดเสี่ยงจากภารกิจ: $initialInspectTaskTitle"
+                }
             }
             onInspectSitePhoto(initialInspectPhotoUri, photoFocusNote)
             onConsumeInitialInspectPhoto()
@@ -166,7 +207,7 @@ fun ContractRiskScreen(
         } else {
             Toast.makeText(
                 context,
-                "กรุณาอนุญาตกล้องเพื่อถ่ายภาพจุดเสี่ยงหน้างานส่งให้ AI ตรวจสอบ",
+                if (lang == AppLanguage.EN) "Please allow camera access to inspect site hazard photos with AI" else "กรุณาอนุญาตกล้องเพื่อถ่ายภาพจุดเสี่ยงหน้างานส่งให้ AI ตรวจสอบ",
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -180,21 +221,14 @@ fun ContractRiskScreen(
             if (!saved.isNullOrBlank()) {
                 selectedPhotoUri = saved
             } else {
-                Toast.makeText(context, "ไม่สามารถอ่านรูปภาพที่เลือกได้", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (lang == AppLanguage.EN) "Unable to read selected image" else "ไม่สามารถอ่านรูปภาพที่เลือกได้",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
-
-    val sampleClauses = listOf(
-        "ค่าปรับ LD วันละ 1.5 แสน ไม่จำกัดเพดาน" to
-            "ข้อ 14. ค่าปรับกรณีงานล่าช้า (Liquidated Damages): หากผู้รับจ้างส่งมอบงานล่าช้ากว่ากำหนดในสัญญา ผู้รับจ้างยินยอมให้ผู้ว่าจ้างปรับเป็นรายวันในอัตราวันละ 0.25% ของมูลค่างานตามสัญญาทั้งหมด (คิดเป็นวันละ 150,000 บาท) โดยไม่มีเพดานสูงสุด และผู้รับจ้างตกลงสละสิทธิ์การขอขยายเวลาก่อสร้าง (EOT) จากเหตุฝนตกหรือการส่งมอบพื้นที่ล่าช้าทุกกรณี",
-        "สั่งแก้งานปากเปล่าก่อนค่อยเบิก VO" to
-            "ข้อ 9. การแก้ไขเปลี่ยนแปลงงาน (Variation Order): ผู้ว่าจ้างหรือวิศวกรผู้ควบคุมงานมีสิทธิ์สั่งแก้ไขเปลี่ยนแปลงรายละเอียดงานหน้างานด้วยวาจาได้ทันที และผู้รับจ้างต้องดำเนินการให้เสร็จสิ้นก่อนจึงจะมีสิทธิ์ยื่นขออนุมัติงบประมาณและระยะเวลาเพิ่มเติมภายหลัง",
-        "แจ้ง EOT ภายใน 3 วัน มิฉะนั้นสละสิทธิ์" to
-            "ข้อ 18. การขอขยายระยะเวลาก่อสร้าง (EOT): ผู้รับจ้างมีสิทธิ์ขอขยายเวลาก่อสร้างเฉพาะเหตุภัยพิบัติที่ทางราชการประกาศเท่านั้น ทั้งนี้ต้องทำหนังสือแจ้งภายใน 3 วันนับแต่วันเกิดเหตุ มิฉะนั้นถือว่าผู้รับจ้างสละสิทธิ์เรียกร้องเวลาและค่าใช้จ่ายใดๆ ทั้งสิ้น",
-        "Pay-when-Paid จ่ายเมื่อเจ้าของจ่าย" to
-            "ข้อ 7. เงื่อนไขการชำระเงินงวดงาน: ผู้รับเหมาหลักจะชำระค่างวดงานให้แก่ผู้รับเหมาช่วงภายใน 45 วันนับตั้งแต่วันที่ผู้รับเหมาหลักได้รับเงินงวดนั้นจากเจ้าของโครงการแล้วเท่านั้น พร้อมหักเงินประกันผลงาน (Retention) ร้อยละ 10 ของทุกงวด"
-    )
 
     LazyColumn(
         modifier = Modifier
@@ -216,20 +250,20 @@ fun ContractRiskScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Gavel,
-                            contentDescription = "LD และ Site Photo Scanner",
+                            contentDescription = s.contractScannerTitle,
                             tint = Color(0xFFFFB300),
                             modifier = Modifier.size(22.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = stringResource(R.string.contract_scanner_title),
+                                text = s.contractScannerTitle,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White
                             )
                             Text(
-                                text = "Cloud Fallback Route • Multimodal Photo & Legal Search Grounding",
+                                text = s.scannerHeaderSubBadge,
                                 fontSize = 11.sp,
                                 color = Color(0xFFFFB300),
                                 fontWeight = FontWeight.SemiBold
@@ -238,7 +272,7 @@ fun ContractRiskScreen(
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = stringResource(R.string.contract_scanner_subtitle),
+                        text = s.contractScannerSubtitle,
                         fontSize = 12.sp,
                         color = Color(0xFFD1D5DB),
                         lineHeight = 17.sp
@@ -254,7 +288,7 @@ fun ContractRiskScreen(
                             onClick = { activeScannerMode = 0 },
                             label = {
                                 Text(
-                                    text = "⚖️ สแกนสัญญา LD",
+                                    text = s.scannerModeContract,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -274,7 +308,7 @@ fun ContractRiskScreen(
                             onClick = { activeScannerMode = 1 },
                             label = {
                                 Text(
-                                    text = "📷 ตรวจรูปหน้างาน",
+                                    text = s.scannerModePhoto,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -306,7 +340,7 @@ fun ContractRiskScreen(
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
-                            text = "ตัวอย่างข้อสัญญาที่มีความเสี่ยงสูง (แตะเพื่อทดสอบ):",
+                            text = s.sampleClausesHeader,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF00E5FF)
@@ -343,7 +377,7 @@ fun ContractRiskScreen(
                             onValueChange = { clauseText = it },
                             label = {
                                 Text(
-                                    text = "วางข้อความข้อสัญญาก่อสร้าง (Contract Clause) ที่ต้องการตรวจสอบ",
+                                    text = s.clauseInputLabel,
                                     color = Color(0xFF9CA3AF)
                                 )
                             },
@@ -355,7 +389,7 @@ fun ContractRiskScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Clear,
-                                            contentDescription = "ล้างข้อความสัญญา",
+                                            contentDescription = s.btnClose,
                                             tint = Color(0xFF9CA3AF)
                                         )
                                     }
@@ -385,7 +419,7 @@ fun ContractRiskScreen(
                                 onClick = { useDeepThinking = false },
                                 label = {
                                     Text(
-                                        text = "⚡ สแกนด่วน + Google Search",
+                                        text = s.scanModeQuickSearch,
                                         fontSize = 11.sp,
                                         fontWeight = if (!useDeepThinking) FontWeight.Bold else FontWeight.Normal
                                     )
@@ -393,7 +427,7 @@ fun ContractRiskScreen(
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.TravelExplore,
-                                        contentDescription = "Google Search Grounding",
+                                        contentDescription = s.scanModeQuickSearch,
                                         modifier = Modifier.size(16.dp)
                                     )
                                 },
@@ -413,7 +447,7 @@ fun ContractRiskScreen(
                                 onClick = { useDeepThinking = true },
                                 label = {
                                     Text(
-                                        text = "🧠 คิดเชิงลึก (High Thinking)",
+                                        text = s.scanModeHighThinking,
                                         fontSize = 11.sp,
                                         fontWeight = if (useDeepThinking) FontWeight.Bold else FontWeight.Normal
                                     )
@@ -421,7 +455,7 @@ fun ContractRiskScreen(
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Psychology,
-                                        contentDescription = "Gemini 4 Carbon High Thinking",
+                                        contentDescription = s.scanModeHighThinking,
                                         modifier = Modifier.size(16.dp)
                                     )
                                 },
@@ -453,11 +487,11 @@ fun ContractRiskScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Gavel,
-                                contentDescription = "วิเคราะห์ความเสี่ยงข้อสัญญาและค่าปรับ LD"
+                                contentDescription = s.analyzeClauseBtn
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "สแกนความเสี่ยงกฎหมาย & ค่าปรับ LD ทันที",
+                                text = s.analyzeClauseBtn,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
@@ -498,7 +532,7 @@ fun ContractRiskScreen(
                                     .padding(bottom = 10.dp)
                             ) {
                                 Text(
-                                    text = "ℹ️ งานวิเคราะห์ภาพถ่าย Multimodal ใช้ Cloud Fallback: Gemini (อัตโนมัติ) เพื่อความแม่นยำในการตรวจจับความเสี่ยงหน้างาน",
+                                    text = s.offlineMultimodalNotice,
                                     fontSize = 11.sp,
                                     color = Color(0xFFFFB300),
                                     modifier = Modifier.padding(10.dp)
@@ -507,7 +541,7 @@ fun ContractRiskScreen(
                         }
 
                         Text(
-                            text = "1. เลือกภาพถ่ายจุดเสี่ยงหน้างาน (ถ่ายใหม่ / คลังภาพ / จาก Room DB):",
+                            text = s.selectPhotoStepTitle,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF00E5FF)
@@ -533,12 +567,12 @@ fun ContractRiskScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.AddAPhoto,
-                                    contentDescription = "ถ่ายรูปจุดเสี่ยงหน้างาน",
+                                    contentDescription = s.captureSitePhotoBtn,
                                     tint = Color(0xFF00E5FF),
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("ถ่ายรูปหน้างาน", fontSize = 11.sp, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                                Text(s.captureSitePhotoBtn, fontSize = 11.sp, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
                             }
 
                             OutlinedButton(
@@ -554,25 +588,26 @@ fun ContractRiskScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.PhotoLibrary,
-                                    contentDescription = "เลือกรูปจากคลังภาพ",
+                                    contentDescription = s.pickFromGalleryBtn,
                                     tint = Color.White,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("เลือกจากคลัง", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                Text(s.pickFromGalleryBtn, fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
                             }
                         }
 
                         if (tasksWithPhotos.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = "รูปภาพหลักฐานที่บันทึกไว้ใน Room DB (${tasksWithPhotos.size} รายการ):",
+                                text = "${s.roomEvidencePhotosHeader} (${tasksWithPhotos.size}):",
                                 fontSize = 11.sp,
                                 color = Color(0xFFD1D5DB)
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(tasksWithPhotos, key = { it.id }) { task ->
+                                    val displayTask = LocalizedSeedMapper.mapTask(task, lang)
                                     val uri = task.photoUri.orEmpty()
                                     val isSelected = selectedPhotoUri == uri
                                     Surface(
@@ -587,14 +622,18 @@ fun ContractRiskScreen(
                                             )
                                             .clickable {
                                                 selectedPhotoUri = uri
-                                                photoFocusNote = "ตรวจสอบจุดเสี่ยงจากภารกิจ: ${task.title}"
+                                                photoFocusNote = if (lang == AppLanguage.EN) {
+                                                    "Inspect hazard evidence from checkpoint: ${displayTask.title}"
+                                                } else {
+                                                    "ตรวจสอบจุดเสี่ยงจากภารกิจ: ${displayTask.title}"
+                                                }
                                             }
                                             .testTag("room_photo_preset_${task.id}")
                                     ) {
                                         Column(modifier = Modifier.padding(6.dp)) {
                                             AsyncImage(
                                                 model = Uri.parse(uri),
-                                                contentDescription = task.title,
+                                                contentDescription = displayTask.title,
                                                 contentScale = ContentScale.Crop,
                                                 modifier = Modifier
                                                     .fillMaxWidth()
@@ -603,7 +642,7 @@ fun ContractRiskScreen(
                                             )
                                             Spacer(modifier = Modifier.height(4.dp))
                                             Text(
-                                                text = task.title,
+                                                text = displayTask.title,
                                                 fontSize = 10.sp,
                                                 color = Color.White,
                                                 maxLines = 1,
@@ -619,7 +658,7 @@ fun ContractRiskScreen(
                             Spacer(modifier = Modifier.height(12.dp))
                             AsyncImage(
                                 model = Uri.parse(selectedPhotoUri),
-                                contentDescription = "ภาพถ่ายหน้างานที่จะส่งตรวจ AI",
+                                contentDescription = s.selectPhotoStepTitle,
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -634,7 +673,7 @@ fun ContractRiskScreen(
                         OutlinedTextField(
                             value = photoFocusNote,
                             onValueChange = { photoFocusNote = it },
-                            label = { Text("จุดที่ต้องการให้ AI ตรวจสอบในภาพ", color = Color(0xFF9CA3AF)) },
+                            label = { Text(s.photoFocusInputLabel, color = Color(0xFF9CA3AF)) },
                             minLines = 2,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = Color.White,
@@ -662,11 +701,11 @@ fun ContractRiskScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = "วิเคราะห์ภาพถ่ายด้วย Cloud Gemini Multimodal"
+                                contentDescription = s.runPhotoInspectionBtn
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "วิเคราะห์ภาพจุดเสี่ยง (Cloud Gemini Multimodal)",
+                                text = s.runPhotoInspectionBtn,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
@@ -698,6 +737,9 @@ private fun ContractRiskResultSection(
     onSaveAnalysisAsSosScript: (title: String, content: String) -> Unit,
     onDiscussInChat: (String) -> Unit
 ) {
+    val lang = LocalAppLanguage.current
+    val s = LocalAppStrings.current
+
     when (contractRiskState) {
         is ContractRiskUiState.Idle -> Unit
         is ContractRiskUiState.Loading -> {
@@ -721,16 +763,20 @@ private fun ContractRiskResultSection(
                     Column {
                         Text(
                             text = if (useDeepThinking) {
-                                "Gemini 4 Carbon กำลังวิเคราะห์ข้อสัญญาในโหมด High Thinking..."
+                                if (lang == AppLanguage.EN) "Gemini 4 Carbon analyzing contract clause (High Thinking)..." else "Gemini 4 Carbon กำลังวิเคราะห์ข้อสัญญาในโหมด High Thinking..."
                             } else {
-                                "Cloud Gemini 3.8 Flash กำลังตรวจสอบข้อกฎหมายและค้นหาข้อมูลผ่าน Google Search..."
+                                if (lang == AppLanguage.EN) "Cloud Gemini 3.8 Flash scanning legal risks & Google Search..." else "Cloud Gemini 3.8 Flash กำลังตรวจสอบข้อกฎหมายและค้นหาข้อมูลผ่าน Google Search..."
                             },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Text(
-                            text = "กำลังประเมินเพดานค่าปรับ LD เงื่อนไข EOT และร่างข้อสัญญาโต้กลับ (Counter-Clause)",
+                            text = if (lang == AppLanguage.EN) {
+                                "Evaluating LD caps, EOT waivers, and drafting redline counter-clause..."
+                            } else {
+                                "กำลังประเมินเพดานค่าปรับ LD เงื่อนไข EOT และร่างข้อสัญญาโต้กลับ (Counter-Clause)"
+                            },
                             fontSize = 11.sp,
                             color = Color(0xFF9CA3AF)
                         )
@@ -782,16 +828,16 @@ private fun ContractRiskResultSection(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.WarningAmber,
-                                contentDescription = "ผลการวิเคราะห์ความเสี่ยงสัญญา",
+                                contentDescription = s.contractScannerTitle,
                                 tint = Color(0xFFFF5252),
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = if (isStreaming) {
-                                    "⚡ กำลังสแกนจุดเสี่ยงข้อสัญญา..."
+                                    if (lang == AppLanguage.EN) "⚡ Scanning contract risk exposure..." else "⚡ กำลังสแกนจุดเสี่ยงข้อสัญญา..."
                                 } else {
-                                    "🚨 ผลการวิเคราะห์ความเสี่ยงกฎหมาย & ค่าปรับ LD"
+                                    if (lang == AppLanguage.EN) "🚨 Legal & LD Risk Assessment" else "🚨 ผลการวิเคราะห์ความเสี่ยงกฎหมาย & ค่าปรับ LD"
                                 },
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
@@ -805,7 +851,7 @@ private fun ContractRiskResultSection(
                                 clipboard.setPrimaryClip(
                                     ClipData.newPlainText("Contract Risk Analysis", analysisText)
                                 )
-                                Toast.makeText(context, "คัดลอกผลวิเคราะห์สำเร็จ!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, s.toastCopied, Toast.LENGTH_SHORT).show()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -813,12 +859,12 @@ private fun ContractRiskResultSection(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.ContentCopy,
-                                contentDescription = "คัดลอกผลวิเคราะห์",
+                                contentDescription = s.btnCopy,
                                 tint = Color.White,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("คัดลอก", fontSize = 11.sp, color = Color.White)
+                            Text(s.btnCopy, fontSize = 11.sp, color = Color.White)
                         }
                     }
 
@@ -838,14 +884,14 @@ private fun ContractRiskResultSection(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "🧠 กระบวนการคิดเชิงลึก (High Thinking Reasoning)",
+                                        text = s.thoughtsToggleTitle,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFFB388FF)
                                     )
                                     Icon(
                                         imageVector = if (showThoughts) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                        contentDescription = "สลับการแสดงกระบวนการคิด",
+                                        contentDescription = s.thoughtsToggleTitle,
                                         tint = Color(0xFFB388FF)
                                     )
                                 }
@@ -865,7 +911,9 @@ private fun ContractRiskResultSection(
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
-                        text = analysisText.ifBlank { "กำลังประมวลผลข้อกฎหมาย..." },
+                        text = analysisText.ifBlank {
+                            if (lang == AppLanguage.EN) "Evaluating contract provisions..." else "กำลังประมวลผลข้อกฎหมาย..."
+                        },
                         fontSize = 12.sp,
                         color = Color.White,
                         lineHeight = 19.sp
@@ -888,11 +936,15 @@ private fun ContractRiskResultSection(
                     ) {
                         Button(
                             onClick = {
-                                val shortTitle = "ข้อโต้แย้งสัญญา/ลดเสี่ยง LD (${clauseText.take(24)}...)"
+                                val shortTitle = if (lang == AppLanguage.EN) {
+                                    "LD Counter-Clause / Defense (${clauseText.take(24)}...)"
+                                } else {
+                                    "ข้อโต้แย้งสัญญา/ลดเสี่ยง LD (${clauseText.take(24)}...)"
+                                }
                                 onSaveAnalysisAsSosScript(shortTitle, analysisText)
                                 Toast.makeText(
                                     context,
-                                    "บันทึกลงหน้าสคริปต์ SOS (Room DB) แล้ว!",
+                                    if (lang == AppLanguage.EN) "Saved to SOS Scripts (Room DB)!" else "บันทึกลงหน้าสคริปต์ SOS (Room DB) แล้ว!",
                                     Toast.LENGTH_SHORT
                                 ).show()
                             },
@@ -906,12 +958,12 @@ private fun ContractRiskResultSection(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.BookmarkAdd,
-                                contentDescription = "บันทึกเป็นสคริปต์ SOS",
+                                contentDescription = s.saveToSosScriptsBtn,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "เก็บลงสคริปต์ SOS",
+                                text = s.saveToSosScriptsBtn,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
@@ -919,9 +971,12 @@ private fun ContractRiskResultSection(
 
                         OutlinedButton(
                             onClick = {
-                                onDiscussInChat(
+                                val prompt = if (lang == AppLanguage.EN) {
+                                    "Suggest practical negotiation tactics with the employer for this contract clause: \"$clauseText\""
+                                } else {
                                     "ช่วยแนะนำวิธีเจรจาต่อรองกับผู้ว่าจ้างสำหรับข้อสัญญานี้เพิ่มเติม: \"$clauseText\""
-                                )
+                                }
+                                onDiscussInChat(prompt)
                             },
                             modifier = Modifier
                                 .weight(1f)
@@ -929,13 +984,13 @@ private fun ContractRiskResultSection(
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Chat,
-                                contentDescription = "ปรึกษาต่อในแชท AI",
+                                contentDescription = s.askInAiChatBtn,
                                 tint = Color(0xFF00E5FF),
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "ถามต่อในแชท AI",
+                                text = s.askInAiChatBtn,
                                 fontSize = 11.sp,
                                 color = Color(0xFF00E5FF),
                                 fontWeight = FontWeight.Bold
@@ -954,12 +1009,18 @@ private fun ContractRiskResultSection(
                     .border(1.dp, Color(0xFFFF5252), RoundedCornerShape(10.dp))
                     .testTag("contract_risk_error_card")
             ) {
-                Text(
-                    text = "⚠️ ${contractRiskState.message}",
-                    fontSize = 12.sp,
-                    color = Color.White,
-                    modifier = Modifier.padding(14.dp)
-                )
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "⚠️ ${contractRiskState.message}",
+                        fontSize = 12.sp,
+                        color = Color.White
+                    )
+                    AppCheckDebugTokenBanner(
+                        context = context,
+                        errorMessage = contractRiskState.message,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                }
             }
         }
     }
@@ -972,6 +1033,9 @@ private fun SitePhotoInspectionResultSection(
     onSaveAnalysisAsSosScript: (title: String, content: String) -> Unit,
     onDiscussInChat: (String) -> Unit
 ) {
+    val lang = LocalAppLanguage.current
+    val s = LocalAppStrings.current
+
     when (state) {
         is SitePhotoInspectUiState.Idle -> Unit
         is SitePhotoInspectUiState.Loading -> {
@@ -994,13 +1058,21 @@ private fun SitePhotoInspectionResultSection(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "Cloud Gemini 3.8 Flash (Multimodal) กำลังตรวจภาพหน้างาน...",
+                            text = if (lang == AppLanguage.EN) {
+                                "Cloud Gemini 3.8 Flash (Multimodal) inspecting site photo..."
+                            } else {
+                                "Cloud Gemini 3.8 Flash (Multimodal) กำลังตรวจภาพหน้างาน..."
+                            },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Text(
-                            text = "กำลังประเมินความเสี่ยงด้าน Safety, โครงสร้าง, ค่าปรับ LD และหลักฐาน VO/EOT",
+                            text = if (lang == AppLanguage.EN) {
+                                "Analyzing OSH safety risks, structural QA, LD exposure, and VO/EOT evidence"
+                            } else {
+                                "กำลังประเมินความเสี่ยงด้าน Safety, โครงสร้าง, ค่าปรับ LD และหลักฐาน VO/EOT"
+                            },
                             fontSize = 11.sp,
                             color = Color(0xFF9CA3AF)
                         )
@@ -1030,7 +1102,7 @@ private fun SitePhotoInspectionResultSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "📷 ผลตรวจสอบภาพถ่ายจุดเสี่ยงหน้างาน",
+                            text = if (lang == AppLanguage.EN) "📷 Site Risk Photo Inspection Report" else "📷 ผลตรวจสอบภาพถ่ายจุดเสี่ยงหน้างาน",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color(0xFF00E5FF),
@@ -1040,7 +1112,7 @@ private fun SitePhotoInspectionResultSection(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 clipboard.setPrimaryClip(ClipData.newPlainText("Site Photo Inspection", state.analysis))
-                                Toast.makeText(context, "คัดลอกผลตรวจภาพถ่ายสำเร็จ!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, s.toastCopied, Toast.LENGTH_SHORT).show()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -1048,12 +1120,12 @@ private fun SitePhotoInspectionResultSection(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.ContentCopy,
-                                contentDescription = "คัดลอกผลตรวจภาพถ่าย",
+                                contentDescription = s.btnCopy,
                                 tint = Color.White,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("คัดลอก", fontSize = 11.sp, color = Color.White)
+                            Text(s.btnCopy, fontSize = 11.sp, color = Color.White)
                         }
                     }
 
@@ -1074,10 +1146,11 @@ private fun SitePhotoInspectionResultSection(
                     ) {
                         Button(
                             onClick = {
-                                onSaveAnalysisAsSosScript("รายงานตรวจภาพหน้างาน (Site Photo)", state.analysis)
+                                val title = if (lang == AppLanguage.EN) "Site Photo Inspection Report" else "รายงานตรวจภาพหน้างาน (Site Photo)"
+                                onSaveAnalysisAsSosScript(title, state.analysis)
                                 Toast.makeText(
                                     context,
-                                    "บันทึกลงหน้าสคริปต์ SOS (Room DB) แล้ว!",
+                                    if (lang == AppLanguage.EN) "Saved to SOS Scripts (Room DB)!" else "บันทึกลงหน้าสคริปต์ SOS (Room DB) แล้ว!",
                                     Toast.LENGTH_SHORT
                                 ).show()
                             },
@@ -1091,18 +1164,21 @@ private fun SitePhotoInspectionResultSection(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.BookmarkAdd,
-                                contentDescription = "บันทึกเป็นสคริปต์ SOS",
+                                contentDescription = s.saveToSosScriptsBtn,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("เก็บลงสคริปต์", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(s.saveToSosScriptsBtn, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                         }
 
                         OutlinedButton(
                             onClick = {
-                                onDiscussInChat(
+                                val prompt = if (lang == AppLanguage.EN) {
+                                    "Based on this site photo inspection, help draft an EOT reservation or subcontractor corrective notice: ${state.analysis.take(300)}"
+                                } else {
                                     "จากผลตรวจภาพหน้างานนี้ ช่วยแนะนำวิธีเขียนหนังสือสงวนสิทธิ์ EOT หรือแจ้งเตือนผู้รับเหมา: ${state.analysis.take(300)}"
-                                )
+                                }
+                                onDiscussInChat(prompt)
                             },
                             modifier = Modifier
                                 .weight(1f)
@@ -1110,12 +1186,12 @@ private fun SitePhotoInspectionResultSection(
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Chat,
-                                contentDescription = "ถามต่อในแชท AI",
+                                contentDescription = s.askShortChatBtn,
                                 tint = Color(0xFF00E5FF),
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("ถามต่อในแชท", fontSize = 11.sp, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                            Text(s.askShortChatBtn, fontSize = 11.sp, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1130,12 +1206,18 @@ private fun SitePhotoInspectionResultSection(
                     .border(1.dp, Color(0xFFFF5252), RoundedCornerShape(10.dp))
                     .testTag("site_photo_inspect_error_card")
             ) {
-                Text(
-                    text = "⚠️ ${state.message}",
-                    fontSize = 12.sp,
-                    color = Color.White,
-                    modifier = Modifier.padding(14.dp)
-                )
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "⚠️ ${state.message}",
+                        fontSize = 12.sp,
+                        color = Color.White
+                    )
+                    AppCheckDebugTokenBanner(
+                        context = context,
+                        errorMessage = state.message,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                }
             }
         }
     }
@@ -1147,6 +1229,8 @@ fun GroundingSourcesSection(
     searchQueries: List<String>,
     sources: List<GroundingSource>
 ) {
+    val lang = LocalAppLanguage.current
+    val s = LocalAppStrings.current
     Surface(
         color = Color(0xFF1E293B),
         shape = RoundedCornerShape(8.dp),
@@ -1158,13 +1242,13 @@ fun GroundingSourcesSection(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Default.Language,
-                    contentDescription = "ข้อมูลอ้างอิงจาก Google Search",
+                    contentDescription = s.groundingSourcesTitle,
                     tint = Color(0xFF00E5FF),
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "อ้างอิงข้อมูลล่าสุดผ่าน Google Search Grounding",
+                    text = s.groundingSourcesTitle,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF00E5FF)
@@ -1174,7 +1258,7 @@ fun GroundingSourcesSection(
             if (searchQueries.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "คำค้นหา: ${searchQueries.joinToString(", ")}",
+                    text = "${if (lang == AppLanguage.EN) "Queries" else "คำค้นหา"}: ${searchQueries.joinToString(", ")}",
                     fontSize = 10.sp,
                     color = Color(0xFF9CA3AF)
                 )
@@ -1208,7 +1292,7 @@ fun GroundingSourcesSection(
                         )
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                            contentDescription = "เปิดลิงก์อ้างอิง",
+                            contentDescription = source.title,
                             tint = Color(0xFF00E5FF),
                             modifier = Modifier.size(14.dp)
                         )

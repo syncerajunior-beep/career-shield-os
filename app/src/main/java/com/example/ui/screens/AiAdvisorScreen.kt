@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -86,20 +87,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.example.R
 import com.example.data.CertifiedBaselineData
 import com.example.data.ChecklistWithItems
 import com.example.data.ExceptionAuditEntity
 import com.example.data.InspectionChecklistEntity
 import com.example.data.NanoDiagnosticLanguage
 import com.example.data.RiskAssessmentReportEntity
+import com.example.ui.components.AppCheckDebugTokenBanner
 import com.example.ui.components.InferenceSourcePill
 import com.example.ui.components.RiskInspectionRoomPanel
+import com.example.ui.localization.AppLanguage
+import com.example.ui.localization.LocalAppLanguage
+import com.example.ui.localization.LocalAppStrings
+import com.example.ui.localization.appStrings
 import com.example.viewmodel.AiGeneratorUiState
 import com.example.viewmodel.AiThinkingUiState
 import com.example.viewmodel.ChatMessage
@@ -171,24 +176,40 @@ fun AiAdvisorScreen(
     onSetInspectionItemResult: (Long, Long, String) -> Unit = { _, _, _ -> },
     onDeleteInspectionChecklist: (InspectionChecklistEntity) -> Unit = {}
 ) {
+    val lang = LocalAppLanguage.current
+    val s = LocalAppStrings.current
+
     // 0 = Hybrid Ops (Preview Target + Cloud), 1 = Chatbot, 2 = Live Voice, 3 = High Thinking & Pack
     var activeSubTab by rememberSaveable { mutableIntStateOf(0) }
     var chatInput by rememberSaveable { mutableStateOf("") }
     var hybridQaInput by rememberSaveable { mutableStateOf("") }
-    var materialAreaInput by rememberSaveable { mutableStateOf("ชั้น 1 (พื้นที่ 60 ตร.ม.)") }
-    var materialRequestInput by rememberSaveable {
-        mutableStateOf("ขอเบิกกระเบื้อง 95 ตร.ม. และปูนกาว 40 ถุง สำหรับปูพื้นชั้น 1")
-    }
+    var materialAreaInput by rememberSaveable { mutableStateOf(s.sanityPreset60Area) }
+    var materialRequestInput by rememberSaveable { mutableStateOf(s.sanityPreset60Req) }
     var exceptionJustificationInput by rememberSaveable { mutableStateOf("") }
-    var safetyHazardInput by rememberSaveable {
-        mutableStateOf("ช่างติดตั้งนั่งร้านชั้น 5 สูง 14 เมตร ไม่มีราวกันตกและคนงานไม่สวม Safety Harness")
-    }
-    var crisisInput by rememberSaveable {
-        mutableStateOf(
-            "ผู้ว่าจ้างสั่งรื้อแก้ไขผนังก่ออิฐมวลเบาชั้น 4 ปากเปล่าโดยไม่ออกเอกสาร VO และเร่งให้เสร็จก่อนตรวจงวดงานวันศุกร์"
-        )
-    }
+    var safetyHazardInput by rememberSaveable { mutableStateOf(s.defaultSafetyHazardInput) }
+    var crisisInput by rememberSaveable { mutableStateOf(s.defaultCrisisInput) }
     var showThoughts by rememberSaveable { mutableStateOf(true) }
+
+    LaunchedEffect(lang) {
+        val otherLang = if (lang == AppLanguage.TH) AppLanguage.EN else AppLanguage.TH
+        val otherStrings = appStrings(otherLang)
+        if (materialAreaInput == otherStrings.sanityPreset60Area) {
+            materialAreaInput = s.sanityPreset60Area
+        } else if (materialAreaInput == otherStrings.sanityPresetLot3Area) {
+            materialAreaInput = s.sanityPresetLot3Area
+        }
+        if (materialRequestInput == otherStrings.sanityPreset60Req) {
+            materialRequestInput = s.sanityPreset60Req
+        } else if (materialRequestInput == otherStrings.sanityPresetLot3Req) {
+            materialRequestInput = s.sanityPresetLot3Req
+        }
+        if (safetyHazardInput == otherStrings.defaultSafetyHazardInput) {
+            safetyHazardInput = s.defaultSafetyHazardInput
+        }
+        if (crisisInput == otherStrings.defaultCrisisInput) {
+            crisisInput = s.defaultCrisisInput
+        }
+    }
 
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -198,7 +219,11 @@ fun AiAdvisorScreen(
         } else {
             Toast.makeText(
                 context,
-                "กรุณาอนุญาตการใช้ไมโครโฟนเพื่อสนทนาเสียงสดกับ Gemini 3.8 Live",
+                if (lang == AppLanguage.EN) {
+                    "Please allow microphone permission to talk live with Gemini 3.8 Live"
+                } else {
+                    "กรุณาอนุญาตการใช้ไมโครโฟนเพื่อสนทนาเสียงสดกับ Gemini 3.8 Live"
+                },
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -246,11 +271,11 @@ fun AiAdvisorScreen(
             FilterChip(
                 selected = activeSubTab == 0,
                 onClick = { activeSubTab = 0 },
-                label = { Text("Hybrid Ops (Preview)", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                label = { Text(s.subTabHybridOps, fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Memory,
-                        contentDescription = "Hybrid Ops On-Device Preview",
+                        contentDescription = s.subTabHybridOps,
                         modifier = Modifier.size(15.dp)
                     )
                 },
@@ -268,11 +293,11 @@ fun AiAdvisorScreen(
             FilterChip(
                 selected = activeSubTab == 1,
                 onClick = { activeSubTab = 1 },
-                label = { Text("แชทบอท AI", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                label = { Text(s.subTabChat, fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Chat,
-                        contentDescription = "แชทบอทที่ปรึกษาสัญญา",
+                        contentDescription = s.subTabChat,
                         modifier = Modifier.size(15.dp)
                     )
                 },
@@ -290,11 +315,11 @@ fun AiAdvisorScreen(
             FilterChip(
                 selected = activeSubTab == 2,
                 onClick = { activeSubTab = 2 },
-                label = { Text("คุยเสียงสด (Live)", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                label = { Text(s.subTabLiveVoice, fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.GraphicEq,
-                        contentDescription = "สนทนาเสียงสด Gemini 3.8 Live",
+                        contentDescription = s.subTabLiveVoice,
                         modifier = Modifier.size(15.dp)
                     )
                 },
@@ -312,11 +337,11 @@ fun AiAdvisorScreen(
             FilterChip(
                 selected = activeSubTab == 3,
                 onClick = { activeSubTab = 3 },
-                label = { Text("High Thinking", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                label = { Text(s.subTabHighThinking, fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Psychology,
-                        contentDescription = "โหมดคิดเชิงลึก Gemini 4 Carbon",
+                        contentDescription = s.subTabHighThinking,
                         modifier = Modifier.size(15.dp)
                     )
                 },
@@ -370,7 +395,7 @@ fun AiAdvisorScreen(
                 onClearNanoDiagnostic = onClearNanoDiagnostic,
                 onSummarizeDailyLog = onSummarizeDailyLog,
                 onDetectDuplicateProgress = onDetectDuplicateProgress,
-                    onAskHybridQa = {
+                onAskHybridQa = {
                     if (hybridQaInput.isNotBlank()) {
                         onAskHybridSiteQa(hybridQaInput)
                         hybridQaInput = ""
@@ -406,6 +431,7 @@ fun AiAdvisorScreen(
                 onClearChat = onClearChat
             )
             2 -> LiveVoiceSubScreen(
+                context = context,
                 liveVoiceState = liveVoiceState,
                 onToggleVoice = {
                     val hasPermission = ContextCompat.checkSelfPermission(
@@ -485,13 +511,27 @@ private fun HybridOpsSubScreen(
     onSetInspectionItemResult: (Long, Long, String) -> Unit,
     onDeleteInspectionChecklist: (InspectionChecklistEntity) -> Unit
 ) {
+    val lang = LocalAppLanguage.current
+    val s = LocalAppStrings.current
     val auditDateFormatter = remember { SimpleDateFormat("dd/MM HH:mm", Locale.US) }
-    val safetyPresets = listOf(
-        "บ่อขุดลึก 3.5 เมตร ไม่มีชีทไพล์กันดินพังช่วงฝนตก",
-        "ตู้ไฟชั่วคราวหน้างานน้ำขัง ไม่มีสายดินและ ELCB",
-        "ยกแผ่นพื้นสำเร็จรูปใกล้สายไฟแรงสูง ไม่กั้นเขตอันตราย",
-        "ทำงานบนนั่งร้านสูง 12 เมตร ไม่ติดป้าย Tag ตรวจรับ"
-    )
+    val safetyPresets = remember(lang) {
+        if (lang == AppLanguage.EN) {
+            listOf(
+                "3.5m deep excavation without sheet piles during heavy rain",
+                "Temporary site DB panel near standing water without earthing or ELCB",
+                "Craning precast slabs near energized overhead HV power lines without exclusion zone",
+                "Working on 12m scaffolding missing inspection Green Tag"
+            )
+        } else {
+            listOf(
+                "บ่อขุดลึก 3.5 เมตร ไม่มีชีทไพล์กันดินพังช่วงฝนตก",
+                "ตู้ไฟชั่วคราวหน้างานน้ำขัง ไม่มีสายดินและ ELCB",
+                "ยกแผ่นพื้นสำเร็จรูปใกล้สายไฟแรงสูง ไม่กั้นเขตอันตราย",
+                "ทำงานบนนั่งร้านสูง 12 เมตร ไม่ติดป้าย Tag ตรวจรับ"
+            )
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -520,14 +560,14 @@ private fun HybridOpsSubScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Memory,
-                                contentDescription = "สถานะ AICore On-Device Preview",
+                                contentDescription = s.hybridCardTitle,
                                 tint = Color(0xFF00E676),
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = "Firebase AI Logic Hybrid Inference",
+                                    text = s.hybridCardTitle,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = Color.White
@@ -553,7 +593,7 @@ private fun HybridOpsSubScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
-                                contentDescription = "ตรวจสอบสถานะ AICore ใหม่",
+                                contentDescription = s.deviceStatusPrefix,
                                 tint = Color(0xFF00E5FF)
                             )
                         }
@@ -561,14 +601,15 @@ private fun HybridOpsSubScreen(
 
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "สถานะเครื่อง: $onDeviceStatusLabel",
+                        text = "${s.deviceStatusPrefix} $onDeviceStatusLabel",
                         fontSize = 12.sp,
                         color = Color(0xFFD1D5DB)
                     )
                     if (deviceCompatibilitySummary.isNotBlank()) {
                         Spacer(modifier = Modifier.height(2.dp))
+                        val unconfirmedLabel = if (lang == AppLanguage.EN) "Not confirmed by AICore" else "ยังไม่ยืนยันจาก AICore"
                         Text(
-                            text = "อุปกรณ์: $deviceCompatibilitySummary • Model Name: ${verifiedOnDeviceModelName ?: "ยังไม่ยืนยันจาก AICore"}",
+                            text = "${s.deviceHardwarePrefix} $deviceCompatibilitySummary • Model Name: ${verifiedOnDeviceModelName ?: unconfirmedLabel}",
                             fontSize = 10.sp,
                             color = Color(0xFF9CA3AF)
                         )
@@ -586,13 +627,20 @@ private fun HybridOpsSubScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Download,
-                                contentDescription = "ดาวน์โหลดโมเดล On-Device Preview",
+                                contentDescription = s.downloadOnDeviceBtn,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("ดาวน์โหลดโมเดล On-Device Preview", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(s.downloadOnDeviceBtn, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
+
+                    AppCheckDebugTokenBanner(
+                        context = context,
+                        errorMessage = null,
+                        alwaysShowInDebug = true,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
                 }
             }
         }
@@ -615,13 +663,13 @@ private fun HybridOpsSubScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Nano 4 Full Preview Diagnostic (ONLY_ON_DEVICE)",
+                                text = s.nanoDiagnosticTitle,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color(0xFF00E5FF)
                             )
                             Text(
-                                text = "Target: OnDeviceModelOption.PREVIEW (nano-v4-full / Gemma 4 E4B) • maxOutputTokens=256 • ไม่สลับไป Cloud",
+                                text = s.nanoDiagnosticSubtitle,
                                 fontSize = 10.sp,
                                 color = Color(0xFF9CA3AF)
                             )
@@ -633,7 +681,7 @@ private fun HybridOpsSubScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "ล้างผลทดสอบ Diagnostic",
+                                    contentDescription = s.btnClose,
                                     tint = Color(0xFF9CA3AF),
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -643,7 +691,7 @@ private fun HybridOpsSubScreen(
 
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "หมายเหตุเอกสาร Google: AICore Developer Preview รองรับอุปกรณ์และโปรแกรมที่ลงทะเบียน (EN/KO ได้รับการรับรองอย่างเป็นทางการ; ทดสอบ TH แยกเพื่อสังเกตผลจริง)",
+                        text = s.nanoDiagnosticNote,
                         fontSize = 10.sp,
                         color = Color(0xFFFFD54F),
                         lineHeight = 14.sp
@@ -661,31 +709,37 @@ private fun HybridOpsSubScreen(
                                 containerColor = Color(0xFF00E5FF),
                                 contentColor = Color(0xFF030712)
                             ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp)
+                                .heightIn(min = 48.dp)
                                 .testTag("nano4_diagnostic_en_button")
                         ) {
                             Text(
-                                text = "Test EN (On-Device)",
+                                text = s.nanoDiagnosticEnBtn,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold
+                                fontWeight = FontWeight.ExtraBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
                         OutlinedButton(
                             onClick = { onRunNanoDiagnostic(NanoDiagnosticLanguage.THAI) },
                             enabled = nanoDiagnosticState !is NanoDiagnosticUiState.Running,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp)
+                                .heightIn(min = 48.dp)
                                 .testTag("nano4_diagnostic_th_button")
                         ) {
                             Text(
-                                text = "ทดสอบ TH (On-Device)",
+                                text = s.nanoDiagnosticThBtn,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF00E5FF)
+                                color = Color(0xFF00E5FF),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -702,7 +756,11 @@ private fun HybridOpsSubScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "กำลังเรียก ONLY_ON_DEVICE (${nanoDiagnosticState.language.name})...",
+                                    text = if (lang == AppLanguage.EN) {
+                                        "Running ONLY_ON_DEVICE (${nanoDiagnosticState.language.name})..."
+                                    } else {
+                                        "กำลังเรียก ONLY_ON_DEVICE (${nanoDiagnosticState.language.name})..."
+                                    },
                                     fontSize = 11.sp,
                                     color = Color.White
                                 )
@@ -803,7 +861,7 @@ private fun HybridOpsSubScreen(
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "งานหน้างานแบบ On-Device / Hybrid (จาก Room DB จริง)",
+                        text = s.siteOpsRoomCardTitle,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF00E5FF)
@@ -828,11 +886,11 @@ private fun HybridOpsSubScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Summarize,
-                                contentDescription = "สรุป Daily Remind Log",
+                                contentDescription = s.summarizeDailyLogBtn,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("สรุป Daily Log", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(s.summarizeDailyLogBtn, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                         }
 
                         Button(
@@ -849,18 +907,18 @@ private fun HybridOpsSubScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.VerifiedUser,
-                                contentDescription = "ตรวจจับรายงานซ้ำซ้อน Anti-BS",
+                                contentDescription = s.antiBsCheckBtn,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("ตรวจ Anti-BS", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(s.antiBsCheckBtn, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = "ถาม-ตอบด่วนหน้างาน (Single-Turn Hybrid Q&A):",
+                        text = s.singleTurnQaTitle,
                         fontSize = 11.sp,
                         color = Color(0xFFD1D5DB),
                         fontWeight = FontWeight.SemiBold
@@ -876,7 +934,7 @@ private fun HybridOpsSubScreen(
                             onValueChange = onQaInputChange,
                             placeholder = {
                                 Text(
-                                    text = "เช่น เช็กอะไรก่อนเทคอนกรีตฐานราก?",
+                                    text = s.singleTurnQaPlaceholder,
                                     fontSize = 12.sp,
                                     color = Color(0xFF9CA3AF)
                                 )
@@ -906,7 +964,7 @@ private fun HybridOpsSubScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "ส่งคำถาม Hybrid Q&A"
+                                contentDescription = s.singleTurnQaTitle
                             )
                         }
                     }
@@ -937,7 +995,7 @@ private fun HybridOpsSubScreen(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = "กำลังประมวลผล: ${hybridOpsState.taskLabel}...",
+                                text = "${if (lang == AppLanguage.EN) "Processing:" else "กำลังประมวลผล:"} ${hybridOpsState.taskLabel}...",
                                 fontSize = 12.sp,
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold
@@ -976,19 +1034,19 @@ private fun HybridOpsSubScreen(
                                     onClick = {
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                         clipboard.setPrimaryClip(ClipData.newPlainText("Hybrid AI Result", hybridOpsState.resultText))
-                                        Toast.makeText(context, "คัดลอกผลวิเคราะห์สำเร็จ!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, s.toastCopied, Toast.LENGTH_SHORT).show()
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "คัดลอกผล Hybrid AI",
+                                        contentDescription = s.btnCopy,
                                         tint = Color.White,
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("คัดลอก", fontSize = 11.sp, color = Color.White)
+                                    Text(s.btnCopy, fontSize = 11.sp, color = Color.White)
                                 }
                             }
                             Spacer(modifier = Modifier.height(8.dp))
@@ -1016,6 +1074,11 @@ private fun HybridOpsSubScreen(
                                 fontSize = 12.sp,
                                 color = Color.White
                             )
+                            AppCheckDebugTokenBanner(
+                                context = context,
+                                errorMessage = hybridOpsState.message,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
                             if (hybridOpsState.isOnDeviceUnavailable) {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Button(
@@ -1027,7 +1090,7 @@ private fun HybridOpsSubScreen(
                                     modifier = Modifier.testTag("switch_cloud_fallback_from_ops_button")
                                 ) {
                                     Text(
-                                        text = "ปิด Offline Mode เพื่อสลับกลับ Cloud Fallback",
+                                        text = s.disableOfflineUseCloudBtn,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -1056,20 +1119,20 @@ private fun HybridOpsSubScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.HealthAndSafety,
-                            contentDescription = "วิเคราะห์ความเสี่ยงปลอดภัยหน้างาน",
+                            contentDescription = s.safetyCardTitle,
                             tint = Color(0xFFFF7043),
                             modifier = Modifier.size(22.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "วิเคราะห์ความเสี่ยงปลอดภัยหน้างาน (Site Safety AI)",
+                                text = s.safetyCardTitle,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White
                             )
                             Text(
-                                text = "ประเมินอันตราย กฎกระทรวง 2564, PPE และมาตรการ Stop-Work จากข้อความ",
+                                text = s.safetyCardSubtitle,
                                 fontSize = 11.sp,
                                 color = Color(0xFFFFAB91)
                             )
@@ -1112,7 +1175,7 @@ private fun HybridOpsSubScreen(
                         onValueChange = onSafetyHazardInputChange,
                         label = {
                             Text(
-                                text = "ระบุสภาพหน้างาน / จุดเสี่ยงอุบัติเหตุที่พบ",
+                                text = s.safetyInputLabel,
                                 color = Color(0xFF9CA3AF),
                                 fontSize = 12.sp
                             )
@@ -1146,12 +1209,12 @@ private fun HybridOpsSubScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.WarningAmber,
-                            contentDescription = "วิเคราะห์ความเสี่ยงปลอดภัยด้วย Gemini AI",
+                            contentDescription = s.analyzeSafetyBtn,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "วิเคราะห์ความเสี่ยงปลอดภัย (Hybrid AI)",
+                            text = s.analyzeSafetyBtn,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
@@ -1183,7 +1246,11 @@ private fun HybridOpsSubScreen(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = "กำลังประเมินความเสี่ยงความปลอดภัยและมาตรการป้องกันหน้างาน...",
+                                text = if (lang == AppLanguage.EN) {
+                                    "Evaluating OSH safety hazards and site controls..."
+                                } else {
+                                    "กำลังประเมินความเสี่ยงความปลอดภัยและมาตรการป้องกันหน้างาน..."
+                                },
                                 fontSize = 12.sp,
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold
@@ -1216,7 +1283,7 @@ private fun HybridOpsSubScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Close,
-                                        contentDescription = "ปิดผลวิเคราะห์ความปลอดภัย",
+                                        contentDescription = s.btnClose,
                                         tint = Color(0xFF9CA3AF),
                                         modifier = Modifier.size(18.dp)
                                     )
@@ -1224,7 +1291,7 @@ private fun HybridOpsSubScreen(
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "🦺 ผลการประเมินความเสี่ยงปลอดภัยหน้างาน",
+                                text = s.safetyResultHeader,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFFFAB91)
@@ -1247,7 +1314,7 @@ private fun HybridOpsSubScreen(
                                         clipboard.setPrimaryClip(
                                             ClipData.newPlainText("Safety Risk Analysis", siteSafetyRiskState.analysis)
                                         )
-                                        Toast.makeText(context, "คัดลอกผลประเมินความปลอดภัยแล้ว!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, s.toastCopied, Toast.LENGTH_SHORT).show()
                                     },
                                     modifier = Modifier
                                         .weight(1f)
@@ -1255,12 +1322,12 @@ private fun HybridOpsSubScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "คัดลอกผลประเมินความปลอดภัย",
+                                        contentDescription = s.btnCopy,
                                         tint = Color.White,
                                         modifier = Modifier.size(15.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("คัดลอก", fontSize = 11.sp, color = Color.White)
+                                    Text(s.btnCopy, fontSize = 11.sp, color = Color.White)
                                 }
 
                                 Button(
@@ -1271,7 +1338,7 @@ private fun HybridOpsSubScreen(
                                         )
                                         Toast.makeText(
                                             context,
-                                            "เพิ่มภารกิจ SAFETY ลงใน Room DB แล้ว!",
+                                            if (lang == AppLanguage.EN) "Added SAFETY checkpoint to Room DB!" else "เพิ่มภารกิจ SAFETY ลงใน Room DB แล้ว!",
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     },
@@ -1286,18 +1353,18 @@ private fun HybridOpsSubScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.AddTask,
-                                        contentDescription = "บันทึกเป็นภารกิจ Safety ใน Room DB",
+                                        contentDescription = s.addToChecklistBtn,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("เพิ่มเข้าเช็กลิสต์", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                                    Text(s.addToChecklistBtn, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                                 }
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedButton(
                                 onClick = {
                                     onSaveSiteSafetyRiskReport(
-                                        "พื้นที่หน้างานตามรายงาน Safety AI",
+                                        if (lang == AppLanguage.EN) "Site Zone (Safety AI Report)" else "พื้นที่หน้างานตามรายงาน Safety AI",
                                         siteSafetyRiskState.hazardInput,
                                         siteSafetyRiskState.analysis,
                                         "HIGH",
@@ -1305,7 +1372,7 @@ private fun HybridOpsSubScreen(
                                     )
                                     Toast.makeText(
                                         context,
-                                        "บันทึกลงฐานข้อมูล Risk Report (Room DB) แล้ว!",
+                                        if (lang == AppLanguage.EN) "Saved to Risk Assessment Report (Room DB)!" else "บันทึกลงฐานข้อมูล Risk Report (Room DB) แล้ว!",
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 },
@@ -1316,13 +1383,13 @@ private fun HybridOpsSubScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.SaveAlt,
-                                    contentDescription = "บันทึกผลวิเคราะห์ลง Risk Assessment Report",
+                                    contentDescription = s.saveToRiskReportBtn,
                                     tint = Color(0xFFFFAB91),
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "บันทึกลง Risk Report (Room v4)",
+                                    text = s.saveToRiskReportBtn,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFFFAB91)
@@ -1346,6 +1413,11 @@ private fun HybridOpsSubScreen(
                                 fontSize = 12.sp,
                                 color = Color.White
                             )
+                            AppCheckDebugTokenBanner(
+                                context = context,
+                                errorMessage = siteSafetyRiskState.message,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
                             if (siteSafetyRiskState.isOnDeviceUnavailable) {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Button(
@@ -1357,7 +1429,7 @@ private fun HybridOpsSubScreen(
                                     modifier = Modifier.testTag("switch_cloud_fallback_from_safety_button")
                                 ) {
                                     Text(
-                                        text = "ปิด Offline Mode เพื่อสลับกลับ Cloud Fallback",
+                                        text = s.disableOfflineUseCloudBtn,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -1386,20 +1458,20 @@ private fun HybridOpsSubScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.FactCheck,
-                            contentDescription = "ตรวจความผิดปกติใบขอเบิกวัสดุ",
+                            contentDescription = s.sanityCardTitle,
                             tint = Color(0xFFFFB300),
                             modifier = Modifier.size(22.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "ตรวจใบขอเบิกวัสดุ & ราคาผิดปกติ (Sanity Check)",
+                                text = s.sanityCardTitle,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White
                             )
                             Text(
-                                text = "เทียบเกณฑ์กลางอ่านอย่างเดียว • ข้อมูลชั่วคราวไม่ทับมาตรฐาน",
+                                text = s.sanityCardSubtitle,
                                 fontSize = 11.sp,
                                 color = Color(0xFFFFD54F)
                             )
@@ -1421,13 +1493,18 @@ private fun HybridOpsSubScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Lock,
-                                contentDescription = "เกณฑ์กลางแบบอ่านอย่างเดียว",
+                                contentDescription = s.sanityBaselineRefPrefix,
                                 tint = Color(0xFF38BDF8),
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
+                            val roleLabel = if (lang == AppLanguage.EN) {
+                                "Construction Site Risk & Budget Shield Role"
+                            } else {
+                                CertifiedBaselineData.ROLE_TITLE
+                            }
                             Text(
-                                text = "${CertifiedBaselineData.BASELINE_VERSION} • ${CertifiedBaselineData.ROLE_TITLE}",
+                                text = "${CertifiedBaselineData.BASELINE_VERSION} • $roleLabel",
                                 fontSize = 10.sp,
                                 color = Color(0xFFE0F2FE),
                                 fontWeight = FontWeight.SemiBold
@@ -1447,13 +1524,13 @@ private fun HybridOpsSubScreen(
                             modifier = Modifier
                                 .border(0.5.dp, Color(0xFFFFB300).copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                                 .clickable {
-                                    onMaterialAreaInputChange("ชั้น 1 (พื้นที่ 60 ตร.ม.)")
-                                    onMaterialRequestInputChange("ขอเบิกกระเบื้อง 95 ตร.ม. และปูนกาว 40 ถุง สำหรับปูพื้นชั้น 1")
+                                    onMaterialAreaInputChange(s.sanityPreset60Area)
+                                    onMaterialRequestInputChange(s.sanityPreset60Req)
                                 }
                                 .testTag("material_preset_60sqm_button")
                         ) {
                             Text(
-                                text = "เคส 60 ตร.ม. (ปูนกาว 40 ถุง / กระเบื้อง 95 ตร.ม.)",
+                                text = s.sanityPreset60Label,
                                 fontSize = 11.sp,
                                 color = Color.White,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
@@ -1466,13 +1543,13 @@ private fun HybridOpsSubScreen(
                             modifier = Modifier
                                 .border(0.5.dp, Color(0xFFFFB300).copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                                 .clickable {
-                                    onMaterialAreaInputChange("Lot 3 งานกระจกและผนังเบา")
-                                    onMaterialRequestInputChange("สั่งซื้อกระจก Tempered 12mm Lot 3 ราคาสูงกว่างบกลาง +22% เพื่อส่งมอบทันงวดงาน")
+                                    onMaterialAreaInputChange(s.sanityPresetLot3Area)
+                                    onMaterialRequestInputChange(s.sanityPresetLot3Req)
                                 }
                                 .testTag("material_preset_lot3_button")
                         ) {
                             Text(
-                                text = "เคส Lot 3 ราคาสูงกว่าปกติ (+22% งานเร่งด่วน)",
+                                text = s.sanityPresetLot3Label,
                                 fontSize = 11.sp,
                                 color = Color.White,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
@@ -1487,7 +1564,7 @@ private fun HybridOpsSubScreen(
                         onValueChange = onMaterialAreaInputChange,
                         label = {
                             Text(
-                                text = "พื้นที่ / Lot งานที่ขอเบิก (เช่น ชั้น 1 พื้นที่ 60 ตร.ม.)",
+                                text = s.sanityAreaInputLabel,
                                 color = Color(0xFF9CA3AF),
                                 fontSize = 11.sp
                             )
@@ -1511,7 +1588,7 @@ private fun HybridOpsSubScreen(
                         onValueChange = onMaterialRequestInputChange,
                         label = {
                             Text(
-                                text = "รายละเอียดใบขอเบิกวัสดุ/ราคาที่ลูกน้องส่งมา (ตรวจชั่วคราว)",
+                                text = s.sanityRequestInputLabel,
                                 color = Color(0xFF9CA3AF),
                                 fontSize = 11.sp
                             )
@@ -1545,12 +1622,12 @@ private fun HybridOpsSubScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.FactCheck,
-                            contentDescription = "ตรวจความผิดปกติเทียบเกณฑ์กลาง",
+                            contentDescription = s.runSanityCheckBtn,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "ตรวจความผิดปกติเทียบเกณฑ์กลาง (Hybrid AI)",
+                            text = s.runSanityCheckBtn,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
@@ -1582,7 +1659,11 @@ private fun HybridOpsSubScreen(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = "กำลังเทียบรายการขอเบิกกับ Certified Baseline (ไม่แก้ฐานข้อมูลกลาง)...",
+                                text = if (lang == AppLanguage.EN) {
+                                    "Auditing requisition against Certified Baseline (norms remain read-only)..."
+                                } else {
+                                    "กำลังเทียบรายการขอเบิกกับ Certified Baseline (ไม่แก้ฐานข้อมูลกลาง)..."
+                                },
                                 fontSize = 12.sp,
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold
@@ -1618,7 +1699,7 @@ private fun HybridOpsSubScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Close,
-                                        contentDescription = "ปิดผลตรวจใบเบิกวัสดุ",
+                                        contentDescription = s.btnClose,
                                         tint = Color(0xFF9CA3AF),
                                         modifier = Modifier.size(18.dp)
                                     )
@@ -1626,7 +1707,7 @@ private fun HybridOpsSubScreen(
                             }
 
                             Text(
-                                text = "🔒 เกณฑ์อ้างอิง: ${checkResult.baselineVersion}",
+                                text = "${s.sanityBaselineRefPrefix} ${checkResult.baselineVersion}",
                                 fontSize = 10.sp,
                                 color = Color(0xFF38BDF8),
                                 fontWeight = FontWeight.SemiBold
@@ -1646,14 +1727,14 @@ private fun HybridOpsSubScreen(
                                 onValueChange = onExceptionJustificationInputChange,
                                 label = {
                                     Text(
-                                        text = "หมายเหตุโปร่งใสของผู้จัดการ (เหตุผลที่อนุมัติแพงขึ้น / ระงับตรวจ)",
+                                        text = s.exceptionNoteLabel,
                                         color = Color(0xFF9CA3AF),
                                         fontSize = 11.sp
                                     )
                                 },
                                 placeholder = {
                                     Text(
-                                        text = "เช่น Lot 3 ราคาสูงกว่าเกณฑ์ +22% แต่ต้องสั่งด่วนเพื่อส่งมอบทันงวด",
+                                        text = s.exceptionNotePlaceholder,
                                         color = Color(0xFF6B7280),
                                         fontSize = 11.sp
                                     )
@@ -1691,7 +1772,11 @@ private fun HybridOpsSubScreen(
                                         onExceptionJustificationInputChange("")
                                         Toast.makeText(
                                             context,
-                                            "บันทึกอนุมัติข้อยกเว้นลง Audit Log แล้ว (เกณฑ์กลางไม่ถูกแก้ไข)",
+                                            if (lang == AppLanguage.EN) {
+                                                "Recorded Approved Exception to Audit Log (baseline unmodified)"
+                                            } else {
+                                                "บันทึกอนุมัติข้อยกเว้นลง Audit Log แล้ว (เกณฑ์กลางไม่ถูกแก้ไข)"
+                                            },
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     },
@@ -1706,12 +1791,12 @@ private fun HybridOpsSubScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = "อนุมัติแบบมีข้อยกเว้นลง Audit Log",
+                                        contentDescription = s.approveExceptionBtn,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "อนุมัติข้อยกเว้น",
+                                        text = s.approveExceptionBtn,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.ExtraBold
                                     )
@@ -1731,7 +1816,11 @@ private fun HybridOpsSubScreen(
                                         onExceptionJustificationInputChange("")
                                         Toast.makeText(
                                             context,
-                                            "บันทึกคำสั่งระงับ/เรียกชี้แจงลง Audit Log แล้ว",
+                                            if (lang == AppLanguage.EN) {
+                                                "Recorded Hold / Investigation order to Audit Log"
+                                            } else {
+                                                "บันทึกคำสั่งระงับ/เรียกชี้แจงลง Audit Log แล้ว"
+                                            },
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     },
@@ -1742,13 +1831,13 @@ private fun HybridOpsSubScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.PauseCircle,
-                                        contentDescription = "ระงับและเรียกชี้แจงลง Audit Log",
+                                        contentDescription = s.holdAuditBtn,
                                         tint = Color(0xFFFF8A80),
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "ระงับ/เรียกชี้แจง",
+                                        text = s.holdAuditBtn,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFFFF8A80)
@@ -1773,6 +1862,11 @@ private fun HybridOpsSubScreen(
                                 fontSize = 12.sp,
                                 color = Color.White
                             )
+                            AppCheckDebugTokenBanner(
+                                context = context,
+                                errorMessage = materialSanityCheckState.message,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
                             if (materialSanityCheckState.isOnDeviceUnavailable) {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Button(
@@ -1784,7 +1878,7 @@ private fun HybridOpsSubScreen(
                                     modifier = Modifier.testTag("switch_cloud_fallback_from_sanity_button")
                                 ) {
                                     Text(
-                                        text = "ปิด Offline Mode เพื่อสลับกลับ Cloud Fallback",
+                                        text = s.disableOfflineUseCloudBtn,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -1810,13 +1904,13 @@ private fun HybridOpsSubScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.History,
-                            contentDescription = "บันทึกหลักฐานข้อยกเว้น Audit Log",
+                            contentDescription = s.auditLogTitlePrefix,
                             tint = Color(0xFF38BDF8),
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "บันทึกหลักฐานข้อยกเว้น (Exception Audit Log: ${exceptionAudits.size})",
+                            text = "${s.auditLogTitlePrefix} ${exceptionAudits.size})",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF38BDF8)
@@ -1824,7 +1918,7 @@ private fun HybridOpsSubScreen(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "เก็บหลักฐานเหตุผลที่อนุมัติหรือระงับเฉพาะ Lot/เคส โดยไม่ไปแก้เกณฑ์มาตรฐานกลาง",
+                        text = s.auditLogSubtitle,
                         fontSize = 10.sp,
                         color = Color(0xFF9CA3AF)
                     )
@@ -1832,7 +1926,7 @@ private fun HybridOpsSubScreen(
                     if (exceptionAudits.isEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "ยังไม่มีบันทึกข้อยกเว้น — กด \"ตรวจความผิดปกติเทียบเกณฑ์กลาง\" แล้วเลือกอนุมัติข้อยกเว้นหรือระงับเพื่อเก็บหลักฐานโปร่งใส",
+                            text = s.auditLogEmpty,
                             fontSize = 11.sp,
                             color = Color(0xFFD1D5DB),
                             lineHeight = 16.sp
@@ -1880,7 +1974,7 @@ private fun HybridOpsSubScreen(
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Default.DeleteOutline,
-                                                    contentDescription = "ลบบันทึกข้อยกเว้น ${audit.lotOrItemTitle}",
+                                                    contentDescription = audit.lotOrItemTitle,
                                                     tint = Color(0xFF9CA3AF),
                                                     modifier = Modifier.size(18.dp)
                                                 )
@@ -1894,14 +1988,14 @@ private fun HybridOpsSubScreen(
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            text = "เหตุผล: ${audit.justificationNote}",
+                                            text = "${s.auditReasonPrefix} ${audit.justificationNote}",
                                             fontSize = 11.sp,
                                             color = Color(0xFFE5E7EB),
                                             lineHeight = 16.sp
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            text = "$formattedTime • ${audit.inferenceOrigin} • ไม่ทับเกณฑ์มาตรฐานกลาง",
+                                            text = "$formattedTime • ${audit.inferenceOrigin} • ${s.auditFooterImmutable}",
                                             fontSize = 10.sp,
                                             color = Color(0xFF9CA3AF)
                                         )
@@ -1943,11 +2037,23 @@ private fun MultiTurnChatSubScreen(
     onQuickPrompt: (String) -> Unit,
     onClearChat: () -> Unit
 ) {
-    val quickPrompts = listOf(
-        "วิธีลดค่าปรับ LD ตามกฎหมายไทย",
-        "ขั้นตอนทำหนังสือขอ EOT เมื่อส่งพื้นที่ช้า",
-        "ผู้รับเหมาทิ้งงาน หัก Retention ได้ไหม?"
-    )
+    val lang = LocalAppLanguage.current
+    val s = LocalAppStrings.current
+    val quickPrompts = remember(lang) {
+        if (lang == AppLanguage.EN) {
+            listOf(
+                "How to reduce excessive LD penalties under Thai law?",
+                "Steps to issue formal EOT notice for late handover",
+                "Subcontractor walked off site: can we withhold Retention?"
+            )
+        } else {
+            listOf(
+                "วิธีลดค่าปรับ LD ตามกฎหมายไทย",
+                "ขั้นตอนทำหนังสือขอ EOT เมื่อส่งพื้นที่ช้า",
+                "ผู้รับเหมาทิ้งงาน หัก Retention ได้ไหม?"
+            )
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -1960,7 +2066,7 @@ private fun MultiTurnChatSubScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "💬 แชทบอทที่ปรึกษากฎหมายก่อสร้าง (Cloud Gemini + Google Search)",
+                text = s.chatHeaderTitle,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF00E5FF),
@@ -1974,7 +2080,7 @@ private fun MultiTurnChatSubScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.DeleteSweep,
-                    contentDescription = "ล้างประวัติแชท",
+                    contentDescription = s.chatHeaderTitle,
                     tint = Color(0xFF9CA3AF)
                 )
             }
@@ -2034,7 +2140,7 @@ private fun MultiTurnChatSubScreen(
                 onValueChange = onChatInputChange,
                 placeholder = {
                     Text(
-                        text = "ถามข้อกฎหมายก่อสร้าง ค่าปรับ LD หรือวิธีเจรจา...",
+                        text = s.chatInputPlaceholder,
                         fontSize = 12.sp,
                         color = Color(0xFF9CA3AF)
                     )
@@ -2066,7 +2172,7 @@ private fun MultiTurnChatSubScreen(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "ส่งข้อความแชท"
+                    contentDescription = s.chatInputPlaceholder
                 )
             }
         }
@@ -2078,6 +2184,7 @@ private fun ChatBubbleItem(
     context: Context,
     message: ChatMessage
 ) {
+    val s = LocalAppStrings.current
     val isUser = message.isUser
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -2108,7 +2215,7 @@ private fun ChatBubbleItem(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isUser) "ผู้จัดการฝ่ายก่อสร้าง (คุณ)" else "🛡️ CAREER SHIELD AI",
+                        text = if (isUser) s.chatBubbleUserLabel else s.chatBubbleAiLabel,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (isUser) Color.White else Color(0xFF00E5FF)
@@ -2118,13 +2225,13 @@ private fun ChatBubbleItem(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 clipboard.setPrimaryClip(ClipData.newPlainText("AI Chat", message.text))
-                                Toast.makeText(context, "คัดลอกคำตอบสำเร็จ!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, s.toastCopied, Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.size(28.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.ContentCopy,
-                                contentDescription = "คัดลอกคำตอบแชท",
+                                contentDescription = s.btnCopy,
                                 tint = Color(0xFF9CA3AF),
                                 modifier = Modifier.size(14.dp)
                             )
@@ -2143,6 +2250,14 @@ private fun ChatBubbleItem(
                     lineHeight = 18.sp
                 )
 
+                if (!isUser && message.text.contains("App Check", ignoreCase = true)) {
+                    AppCheckDebugTokenBanner(
+                        context = context,
+                        errorMessage = message.text,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
                 if (message.sources.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     GroundingSourcesSection(
@@ -2158,9 +2273,11 @@ private fun ChatBubbleItem(
 
 @Composable
 private fun LiveVoiceSubScreen(
+    context: Context,
     liveVoiceState: LiveVoiceUiState,
     onToggleVoice: () -> Unit
 ) {
+    val s = LocalAppStrings.current
     val isActive = liveVoiceState is LiveVoiceUiState.Active
     val isConnecting = liveVoiceState is LiveVoiceUiState.Connecting
 
@@ -2216,7 +2333,7 @@ private fun LiveVoiceSubScreen(
                     } else {
                         Icon(
                             imageVector = if (isActive) Icons.Default.GraphicEq else Icons.Default.Mic,
-                            contentDescription = "สถานะไมโครโฟนสนทนาสด",
+                            contentDescription = s.liveVoiceTitle,
                             tint = if (isActive) Color(0xFF00E676) else Color(0xFF00E5FF),
                             modifier = Modifier.size(40.dp)
                         )
@@ -2226,7 +2343,7 @@ private fun LiveVoiceSubScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "สนทนาเสียงสดหน้างาน (Gemini 3.8 Live API)",
+                    text = s.liveVoiceTitle,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color.White
@@ -2236,18 +2353,22 @@ private fun LiveVoiceSubScreen(
 
                 Text(
                     text = when (liveVoiceState) {
-                        is LiveVoiceUiState.Idle ->
-                            "กดปุ่มด้านล่างเพื่อพูดปรึกษาปัญหาหน้างานแบบ Hands-Free ขณะเดินตรวจไซต์งาน"
-                        is LiveVoiceUiState.Connecting ->
-                            "กำลังเชื่อมต่อเซสชันเสียงสด Gemini 3.8 Live..."
-                        is LiveVoiceUiState.Active ->
-                            "🟢 กำลังสนทนาสด — พูดถามเรื่องค่าปรับ LD สัญญา หรือวิธีรับมือผู้รับเหมาได้เลย"
-                        is LiveVoiceUiState.Error ->
-                            "⚠️ ${liveVoiceState.message}"
+                        is LiveVoiceUiState.Idle -> s.liveVoiceIdleDesc
+                        is LiveVoiceUiState.Connecting -> s.liveVoiceConnectingDesc
+                        is LiveVoiceUiState.Active -> s.liveVoiceActiveDesc
+                        is LiveVoiceUiState.Error -> "⚠️ ${liveVoiceState.message}"
                     },
                     fontSize = 12.sp,
                     color = Color(0xFFD1D5DB)
                 )
+
+                if (liveVoiceState is LiveVoiceUiState.Error) {
+                    AppCheckDebugTokenBanner(
+                        context = context,
+                        errorMessage = liveVoiceState.message,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -2264,11 +2385,11 @@ private fun LiveVoiceSubScreen(
                 ) {
                     Icon(
                         imageVector = if (isActive || isConnecting) Icons.Default.MicOff else Icons.Default.Mic,
-                        contentDescription = "สลับการสนทนาเสียงสด"
+                        contentDescription = if (isActive || isConnecting) s.liveVoiceStopBtn else s.liveVoiceStartBtn
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isActive || isConnecting) "วางสาย / หยุดสนทนาเสียงสด" else "เริ่มคุยเสียงสดกับ Gemini 3.8 Live",
+                        text = if (isActive || isConnecting) s.liveVoiceStopBtn else s.liveVoiceStartBtn,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
@@ -2289,7 +2410,7 @@ private fun LiveVoiceSubScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "🎙️ เสียงของคุณ (Live Input Transcript):",
+                        text = s.liveVoiceUserTranscriptLabel,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF00E5FF)
@@ -2301,7 +2422,7 @@ private fun LiveVoiceSubScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "🔊 คำตอบจากที่ปรึกษา AI (Live Audio Transcript):",
+                        text = s.liveVoiceModelTranscriptLabel,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF00E676)
@@ -2331,12 +2452,25 @@ private fun HighThinkingSubScreen(
     onGenerateActionPack: (String) -> Unit,
     onSaveActionPackToRoom: (GeneratedActionPack) -> Unit
 ) {
-    val quickScenarios = listOf(
-        "ผู้รับเหมาลดคนงานเสี่ยงทิ้งงาน",
-        "สั่งแก้งานปากเปล่าไม่เซ็น VO",
-        "เสี่ยงโดนค่าปรับ LD วันละ 1.5 แสน",
-        "คอนเซาท์ดึงเวลาตรวจปูนเกิน SLA 4 ชม."
-    )
+    val lang = LocalAppLanguage.current
+    val s = LocalAppStrings.current
+    val quickScenarios = remember(lang) {
+        if (lang == AppLanguage.EN) {
+            listOf(
+                "Subcontractor cutting manpower — abandonment risk",
+                "Verbal rework order with no signed VO",
+                "LD exposure 150,000 THB/day — EOT needed",
+                "Consultant delaying concrete pour RFI past 4-hr SLA"
+            )
+        } else {
+            listOf(
+                "ผู้รับเหมาลดคนงานเสี่ยงทิ้งงาน",
+                "สั่งแก้งานปากเปล่าไม่เซ็น VO",
+                "เสี่ยงโดนค่าปรับ LD วันละ 1.5 แสน",
+                "คอนเซาท์ดึงเวลาตรวจปูนเกิน SLA 4 ชม."
+            )
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -2357,14 +2491,14 @@ private fun HighThinkingSubScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Psychology,
-                            contentDescription = "โหมดคิดวิเคราะห์เชิงลึก Gemini 4 Carbon",
+                            contentDescription = s.highThinkingTitle,
                             tint = Color(0xFFB388FF),
                             modifier = Modifier.size(22.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = stringResource(R.string.ai_thinking_title),
+                                text = s.highThinkingTitle,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -2379,7 +2513,7 @@ private fun HighThinkingSubScreen(
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = stringResource(R.string.ai_thinking_subtitle),
+                        text = s.highThinkingSubtitle,
                         fontSize = 12.sp,
                         color = Color(0xFFD1D5DB),
                         lineHeight = 17.sp
@@ -2398,7 +2532,7 @@ private fun HighThinkingSubScreen(
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "เลือกสถานการณ์วิกฤตหน้างาน หรือพิมพ์ปัญหาของคุณ:",
+                        text = s.crisisScenariosHeader,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF00E5FF)
@@ -2433,7 +2567,7 @@ private fun HighThinkingSubScreen(
                     OutlinedTextField(
                         value = crisisInput,
                         onValueChange = onCrisisInputChange,
-                        label = { Text("รายละเอียดปัญหาหน้างาน / ข้อพิพาทสัญญา", color = Color(0xFF9CA3AF)) },
+                        label = { Text(s.crisisInputLabel, color = Color(0xFF9CA3AF)) },
                         minLines = 3,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = Color.White,
@@ -2460,16 +2594,17 @@ private fun HighThinkingSubScreen(
                             ),
                             modifier = Modifier
                                 .weight(1f)
+                                .heightIn(min = 48.dp)
                                 .testTag("run_high_thinking_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Psychology,
-                                contentDescription = "วิเคราะห์เชิงลึกด้วย High Thinking",
+                                contentDescription = s.runHighThinkingBtn,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "วิเคราะห์เชิงลึก (High Thinking)",
+                                text = s.runHighThinkingBtn,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
@@ -2483,16 +2618,17 @@ private fun HighThinkingSubScreen(
                             ),
                             modifier = Modifier
                                 .weight(1f)
+                                .heightIn(min = 48.dp)
                                 .testTag("generate_action_pack_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = "สร้างสคริปต์และเช็กลิสต์ลง Room DB",
+                                contentDescription = s.generateActionPackBtn,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "สร้างสคริปต์+เช็กลิสต์",
+                                text = s.generateActionPackBtn,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
@@ -2524,13 +2660,21 @@ private fun HighThinkingSubScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Gemini 4 Carbon กำลังใช้โหมดคิดวิเคราะห์เชิงลึก (ThinkingLevel.HIGH)...",
+                                    text = if (lang == AppLanguage.EN) {
+                                        "Gemini 4 Carbon analyzing in Deep Thinking mode (ThinkingLevel.HIGH)..."
+                                    } else {
+                                        "Gemini 4 Carbon กำลังใช้โหมดคิดวิเคราะห์เชิงลึก (ThinkingLevel.HIGH)..."
+                                    },
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
                                 Text(
-                                    text = "กำลังตรวจสอบเงื่อนไขสัญญา ค่าปรับ LD และแนวทางป้องกันความรับผิดชอบ",
+                                    text = if (lang == AppLanguage.EN) {
+                                        "Evaluating contract clauses, LD exposure, and defense strategy"
+                                    } else {
+                                        "กำลังตรวจสอบเงื่อนไขสัญญา ค่าปรับ LD และแนวทางป้องกันความรับผิดชอบ"
+                                    },
                                     fontSize = 11.sp,
                                     color = Color(0xFF9CA3AF)
                                 )
@@ -2583,14 +2727,14 @@ private fun HighThinkingSubScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = "🧠 กระบวนการคิดเชิงลึก (Internal Reasoning)",
+                                                text = s.highThinkingReasoningHeader,
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFFB388FF)
                                             )
                                             Icon(
                                                 imageVector = if (showThoughts) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                                contentDescription = "สลับการแสดงกระบวนการคิด",
+                                                contentDescription = s.highThinkingReasoningHeader,
                                                 tint = Color(0xFFB388FF)
                                             )
                                         }
@@ -2614,35 +2758,42 @@ private fun HighThinkingSubScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (isStreaming) "⚡ กำลังร่างแผนรับมือ..." else "✅ แผนป้องกันตัวและข้อเสนอแนะทางสัญญา",
+                                    text = if (isStreaming) {
+                                        if (lang == AppLanguage.EN) "⚡ Drafting defense strategy..." else "⚡ กำลังร่างแผนรับมือ..."
+                                    } else {
+                                        s.highThinkingResultHeader
+                                    },
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF00E5FF)
+                                    color = Color(0xFF00E5FF),
+                                    modifier = Modifier.weight(1f)
                                 )
                                 Button(
                                     onClick = {
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                         clipboard.setPrimaryClip(ClipData.newPlainText("AI Advice", answer))
-                                        Toast.makeText(context, "คัดลอกแผนรับมือสำเร็จ!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, s.toastCopied, Toast.LENGTH_SHORT).show()
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1F2937)),
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "คัดลอกคำแนะนำ AI",
+                                        contentDescription = s.btnCopy,
                                         tint = Color.White,
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("คัดลอก", fontSize = 11.sp, color = Color.White)
+                                    Text(s.btnCopy, fontSize = 11.sp, color = Color.White)
                                 }
                             }
 
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = answer.ifBlank { "กำลังวิเคราะห์ข้อมูล..." },
+                                text = answer.ifBlank {
+                                    if (lang == AppLanguage.EN) "Analyzing dispute..." else "กำลังวิเคราะห์ข้อมูล..."
+                                },
                                 fontSize = 12.sp,
                                 color = Color.White,
                                 lineHeight = 19.sp
@@ -2659,12 +2810,18 @@ private fun HighThinkingSubScreen(
                             .border(1.dp, Color(0xFFFF5252), RoundedCornerShape(10.dp))
                             .testTag("high_thinking_error_card")
                     ) {
-                        Text(
-                            text = "⚠️ ${thinkingState.message}",
-                            fontSize = 12.sp,
-                            color = Color.White,
-                            modifier = Modifier.padding(14.dp)
-                        )
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = "⚠️ ${thinkingState.message}",
+                                fontSize = 12.sp,
+                                color = Color.White
+                            )
+                            AppCheckDebugTokenBanner(
+                                context = context,
+                                errorMessage = thinkingState.message,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -2691,7 +2848,11 @@ private fun HighThinkingSubScreen(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = "กำลังสร้างสคริปต์ SOS และรายการเช็กลิสต์สำหรับบันทึกลง Room DB...",
+                                text = if (lang == AppLanguage.EN) {
+                                    "Generating structured SOS script & action checklist for Room DB..."
+                                } else {
+                                    "กำลังสร้างสคริปต์ SOS และรายการเช็กลิสต์สำหรับบันทึกลง Room DB..."
+                                },
                                 fontSize = 12.sp,
                                 color = Color.White
                             )
@@ -2715,14 +2876,14 @@ private fun HighThinkingSubScreen(
                                 modifier = Modifier.padding(bottom = 8.dp)
                             )
                             Text(
-                                text = "✨ ชุดสคริปต์และเช็กลิสต์พร้อมบันทึกลงฐานข้อมูล Room DB",
+                                text = s.actionPackHeader,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF00E676)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "สคริปต์ SOS: ${pack.scriptTitle}",
+                                text = "SOS Script: ${pack.scriptTitle}",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF00E5FF)
@@ -2735,7 +2896,7 @@ private fun HighThinkingSubScreen(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "ภารกิจเช็กลิสต์ที่แนะนำ (${pack.suggestedTasks.size} ข้อ):",
+                                text = "${s.actionPackTasksHeader} (${pack.suggestedTasks.size}):",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -2754,7 +2915,11 @@ private fun HighThinkingSubScreen(
                                     onSaveActionPackToRoom(pack)
                                     Toast.makeText(
                                         context,
-                                        "บันทึกสคริปต์และเช็กลิสต์ลง Room DB เรียบร้อย!",
+                                        if (lang == AppLanguage.EN) {
+                                            "Saved SOS script and checkpoints to Room DB!"
+                                        } else {
+                                            "บันทึกสคริปต์และเช็กลิสต์ลง Room DB เรียบร้อย!"
+                                        },
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 },
@@ -2768,12 +2933,12 @@ private fun HighThinkingSubScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.SaveAlt,
-                                    contentDescription = "บันทึกลง Room DB",
+                                    contentDescription = s.saveActionPackBtn,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "บันทึกทั้งหมดลงฐานข้อมูล Room DB ทันที",
+                                    text = s.saveActionPackBtn,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 12.sp
                                 )
@@ -2789,12 +2954,18 @@ private fun HighThinkingSubScreen(
                             .fillMaxWidth()
                             .border(1.dp, Color(0xFFFF5252), RoundedCornerShape(10.dp))
                     ) {
-                        Text(
-                            text = "⚠️ ${generatorState.message}",
-                            fontSize = 12.sp,
-                            color = Color.White,
-                            modifier = Modifier.padding(14.dp)
-                        )
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = "⚠️ ${generatorState.message}",
+                                fontSize = 12.sp,
+                                color = Color.White
+                            )
+                            AppCheckDebugTokenBanner(
+                                context = context,
+                                errorMessage = generatorState.message,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
                     }
                 }
             }

@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">NANO 4oK</string>
+    <string name="header_title">NANO 4oK</string>
+    <string name="header_subtitle">AI ตรวจบ้าน &amp; หน้างานอัจฉริยะ</string>
+    <string name="tab_site_walk">ตรวจหน้างาน</string>
+    <string name="tab_report_email">รายงาน &amp; ส่งเมล</string>
+    <string name="btn_copy">คัดลอก</string>
+    <string name="btn_share">แชร์ด่วน</string>
+    <string name="toast_copied">คัดลอกข้อความสำเร็จ!</string>
+    <string name="offline_mode_label">Offline Mode</string>
+</resources>

@@ -2,6 +2,7 @@ package com.example
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import androidx.room.Room
@@ -17,14 +18,21 @@ import com.example.data.InspectionChecklistItemEntity
 import com.example.data.InspectionDao
 import com.example.data.NanoDiagnosticLanguage
 import com.example.data.RiskAssessmentReportEntity
+import com.example.data.ScriptEntity
+import com.example.data.SiteWalkDefectEntity
 import com.example.data.TaskDao
 import com.example.data.TaskEntity
 import com.example.data.toOrigin
+import com.example.ui.localization.AppLanguage
+import com.example.ui.localization.AppLanguagePrefs
+import com.example.ui.localization.LocalizedSeedMapper
 import com.example.util.FirebaseManager
 import com.example.viewmodel.CareerShieldViewModel
+import com.example.viewmodel.DefectAiUiState
 import com.example.viewmodel.HybridInferenceSource
 import com.example.viewmodel.MaterialSanityCheckUiState
 import com.example.viewmodel.NanoDiagnosticUiState
+import com.example.viewmodel.ScriptTailorUiState
 import com.example.viewmodel.SiteSafetyRiskUiState
 import com.example.viewmodel.toHybridSource
 import com.google.firebase.FirebaseApp
@@ -32,6 +40,7 @@ import com.google.firebase.FirebaseOptions
 import com.google.firebase.ai.InferenceSource
 import com.google.firebase.ai.OnDeviceModelOption
 import com.google.firebase.ai.type.PublicPreviewAPI
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -79,7 +88,7 @@ class ExampleRobolectricTest {
     fun `read string from context`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val appName = context.getString(R.string.app_name)
-        assertEquals("Career Shield", appName)
+        assertEquals("NANO 4oK", appName)
     }
 
     @OptIn(PublicPreviewAPI::class)
@@ -465,9 +474,14 @@ class ExampleRobolectricTest {
         v3Helper.writableDatabase.close()
         v3Helper.close()
 
-        // Open with Room v4 + MIGRATION_3_4 (without destructive migration fallback) to validate exact SQL schema
+        // Open with Room v5 + MIGRATION_1_2..4_5 (without destructive migration fallback) to validate exact SQL schema
         val migratedDb = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
+            .addMigrations(
+                AppDatabase.MIGRATION_1_2,
+                AppDatabase.MIGRATION_2_3,
+                AppDatabase.MIGRATION_3_4,
+                AppDatabase.MIGRATION_4_5
+            )
             .allowMainThreadQueries()
             .build()
         try {
@@ -553,6 +567,431 @@ class ExampleRobolectricTest {
             viewModel.deleteInspectionChecklist(updatedMep.checklist)
             advanceUntilIdle()
             assertEquals(2, inspectionDao.getAllChecklistsWithItems().first().size)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `test bilingual toggle updates ViewModel state, chat greeting, and clears stale offline error`() = runTest {
+        val testDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(testDispatcher)
+        try {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            if (FirebaseApp.getApps(context).isEmpty()) {
+                FirebaseApp.initializeApp(
+                    context,
+                    FirebaseOptions.Builder()
+                        .setApplicationId("1:000000000000:android:0000000000000000")
+                        .setApiKey("test-api-key-placeholder")
+                        .setProjectId("test-project-id")
+                        .build()
+                )
+            }
+
+            // Verify SharedPreferences persistence helper & values-en / values-th strings.xml
+            AppLanguagePrefs.saveLanguage(context, AppLanguage.TH)
+            assertEquals(AppLanguage.TH, AppLanguagePrefs.loadLanguage(context))
+            AppLanguagePrefs.saveLanguage(context, AppLanguage.EN)
+            assertEquals(AppLanguage.EN, AppLanguagePrefs.loadLanguage(context))
+
+            val enConfig = Configuration(context.resources.configuration).apply {
+                setLocale(Locale.ENGLISH)
+            }
+            val enContext = context.createConfigurationContext(enConfig)
+            assertEquals("NANO 4oK", enContext.getString(R.string.app_name))
+
+            val repository = CareerShieldRepository(dao, inspectionDao)
+            val aiRepository = GeminiAiRepository()
+            val viewModel = CareerShieldViewModel(repository, aiRepository)
+            advanceUntilIdle()
+
+            // Primary default is English
+            assertEquals(AppLanguage.EN, viewModel.appLanguage.value)
+            assertTrue(viewModel.chatMessages.value.first().text.contains("Hello!"))
+
+            // Toggle to Thai
+            val nextLang = viewModel.toggleAppLanguage()
+            assertEquals(AppLanguage.TH, nextLang)
+            assertEquals(AppLanguage.TH, viewModel.appLanguage.value)
+            assertTrue(viewModel.chatMessages.value.first().text.contains("สวัสดีครับ"))
+            assertEquals("พร้อมทำงาน", viewModel.lastInferenceState.value.featureLabel)
+
+            // Trigger Offline Site Mode failure (OnDevice unavailable on JVM), then disable Offline mode
+            viewModel.setOfflineSiteTestMode(true)
+            val sampleScript = ScriptEntity(
+                id = 1,
+                title = "1. Decline Verbal Change Order",
+                content = "Sample content",
+                category = "CONTRACT"
+            )
+            viewModel.tailorSosScript(
+                script = sampleScript,
+                recipientName = "Project Director",
+                reasonDetail = "Level 4",
+                clauseNumber = "VO-12",
+                customSituation = "Make it firm"
+            )
+            advanceUntilIdle()
+
+            val errorState = viewModel.scriptTailorState.value
+            assertTrue(errorState is ScriptTailorUiState.Error)
+            assertTrue((errorState as ScriptTailorUiState.Error).isOnDeviceUnavailable)
+
+            // Turning Offline Mode OFF must clear stale isOnDeviceUnavailable errors immediately
+            viewModel.setOfflineSiteTestMode(false)
+            assertTrue(viewModel.scriptTailorState.value is ScriptTailorUiState.Idle)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `test English CertifiedBaselineData lookup and GeminiAiRepository EN prompt builders`() {
+        val enBaseline = CertifiedBaselineData.findRelevantBaselineText(
+            query = "Level 1 floor 60 sqm ceramic tiles and adhesive",
+            language = AppLanguage.EN
+        )
+        assertTrue(enBaseline.contains(CertifiedBaselineData.BASELINE_VERSION))
+        assertTrue(enBaseline.contains("STD-FLOOR-60"))
+        assertTrue(enBaseline.contains("Safe Norm:"))
+
+        val aiRepository = GeminiAiRepository()
+        val contractPromptEn = aiRepository.buildContractRiskPrompt(
+            clauseText = "Liquidated Damages at 0.25% per day with zero EOT entitlement.",
+            language = AppLanguage.EN
+        )
+        assertTrue(contractPromptEn.contains("Analyze the legal risk and Liquidated Damages (LD)"))
+        assertTrue(contractPromptEn.contains("Liquidated Damages at 0.25% per day"))
+
+        val sanityPromptEn = aiRepository.buildMaterialSanityCheckPrompt(
+            areaScope = "Level 1 (60 sqm)",
+            requestDescription = "Request 95 sqm tiles and 40 adhesive bags",
+            baselineExcerpt = enBaseline,
+            language = AppLanguage.EN
+        )
+        assertTrue(sanityPromptEn.contains("Respond concisely in English"))
+        assertTrue(sanityPromptEn.contains("Anomaly Signal"))
+        assertTrue(sanityPromptEn.contains("STD-FLOOR-60"))
+    }
+
+    @Test
+    fun `test LocalizedSeedMapper translates seeded records to EN and leaves user entries untouched`() {
+        val seededTask = TaskEntity(
+            title = "08:30 ตรวจสอบรูปถ่าย Timestamp Camera (สตีล/ปูน)",
+            description = "Original Thai desc",
+            category = "FINANCE",
+            timeSlot = "08:30"
+        )
+        val enTask = LocalizedSeedMapper.mapTask(seededTask, AppLanguage.EN)
+        assertTrue(enTask.title.contains("Verify Timestamp Camera"))
+        val thTask = LocalizedSeedMapper.mapTask(seededTask, AppLanguage.TH)
+        assertEquals(seededTask.title, thTask.title)
+
+        val userTask = TaskEntity(
+            title = "Custom Steel Delivery Check",
+            description = "User entered note",
+            category = "SAFETY",
+            timeSlot = "10:00"
+        )
+        val mappedUserTask = LocalizedSeedMapper.mapTask(userTask, AppLanguage.EN)
+        assertEquals("Custom Steel Delivery Check", mappedUserTask.title)
+        assertEquals("User entered note", mappedUserTask.description)
+
+        val seededScript = ScriptEntity(
+            title = "2. ขอขยายเวลาก่อสร้าง (EOT) เพื่อหยุดค่าปรับ LD",
+            content = "Original Thai script",
+            category = "EOT_LD"
+        )
+        val enScript = LocalizedSeedMapper.mapScript(seededScript, AppLanguage.EN)
+        assertTrue(enScript.title.contains("Extension of Time (EOT)"))
+        assertTrue(enScript.content.contains("[Reason / Site Zone]"))
+
+        assertEquals(
+            "Scaffolding & Working at Height Inspection (>= 2m)",
+            LocalizedSeedMapper.mapChecklistTitle("CHK-SAFETY-001", "ตรวจนั่งร้าน", AppLanguage.EN)
+        )
+        assertEquals(
+            "100% Safety Harness tie-off enforced for all workers",
+            LocalizedSeedMapper.mapChecklistItemTitle("STD-SAFETY-2564", 3, "สายรัด", AppLanguage.EN)
+        )
+        assertEquals(
+            "Main Site Zone",
+            LocalizedSeedMapper.mapRiskZone("พื้นที่หน้างานหลัก", AppLanguage.EN)
+        )
+    }
+
+    @Test
+    fun `test FirebaseManager getDebugSecret and isAppCheckError helpers`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val expectedUuid = "aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee"
+        val intent = Intent().apply {
+            putExtra("FIREBASE_APPCHECK_DEBUG_TOKEN", expectedUuid)
+        }
+        FirebaseManager.initializeAppCheck(context, intent)
+
+        assertEquals(expectedUuid, FirebaseManager.getDebugSecret(context))
+        assertTrue(FirebaseManager.isAppCheckError("Firebase App Check token is invalid."))
+        assertTrue(FirebaseManager.isAppCheckError("HTTP 403 Forbidden"))
+        assertTrue(FirebaseManager.isAppCheckError("App attestation failed"))
+        assertFalse(FirebaseManager.isAppCheckError("On-device model is not available"))
+        assertFalse(FirebaseManager.isAppCheckError(null))
+    }
+
+    @Test
+    fun `test AppDatabase MIGRATION_4_5 upgrades v4 SQLite schema to v5 and supports SiteWalkDefectDao CRUD`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dbName = "test_migration_4_5.db"
+        context.deleteDatabase(dbName)
+
+        // Build v4 schema directly using Room's v4 migration SQL
+        val rawDb = SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(dbName).apply {
+            parentFile?.mkdirs()
+        }, null)
+        rawDb.version = 4
+        rawDb.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS career_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                category TEXT NOT NULL,
+                timeSlot TEXT NOT NULL,
+                isCompleted INTEGER NOT NULL,
+                timestamp INTEGER NOT NULL,
+                photoUri TEXT
+            )
+            """.trimIndent()
+        )
+        rawDb.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS sos_scripts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                category TEXT NOT NULL,
+                riskLevel TEXT NOT NULL,
+                timestamp INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        rawDb.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS exception_audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                lotOrItemTitle TEXT NOT NULL,
+                areaOrScope TEXT NOT NULL,
+                baselineVersion TEXT NOT NULL,
+                aiFlagSummary TEXT NOT NULL,
+                decisionStatus TEXT NOT NULL,
+                justificationNote TEXT NOT NULL,
+                inferenceOrigin TEXT NOT NULL,
+                timestamp INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        rawDb.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS risk_assessment_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                reportCode TEXT NOT NULL,
+                projectName TEXT NOT NULL,
+                siteZone TEXT NOT NULL,
+                reportType TEXT NOT NULL,
+                severityLevel TEXT NOT NULL,
+                hazardSummary TEXT NOT NULL,
+                assessmentFindings TEXT NOT NULL,
+                mitigationPlan TEXT NOT NULL,
+                inspectorName TEXT NOT NULL,
+                photoUri TEXT,
+                inferenceOrigin TEXT NOT NULL,
+                status TEXT NOT NULL,
+                createdAt INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        rawDb.execSQL("CREATE INDEX IF NOT EXISTS index_risk_assessment_reports_reportType ON risk_assessment_reports (reportType)")
+        rawDb.execSQL("CREATE INDEX IF NOT EXISTS index_risk_assessment_reports_severityLevel ON risk_assessment_reports (severityLevel)")
+        rawDb.execSQL("CREATE INDEX IF NOT EXISTS index_risk_assessment_reports_status ON risk_assessment_reports (status)")
+        rawDb.execSQL("CREATE INDEX IF NOT EXISTS index_risk_assessment_reports_createdAt ON risk_assessment_reports (createdAt)")
+        rawDb.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS inspection_checklists (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                checklistCode TEXT NOT NULL,
+                title TEXT NOT NULL,
+                tradeCategory TEXT NOT NULL,
+                siteZone TEXT NOT NULL,
+                inspectorName TEXT NOT NULL,
+                linkedReportId INTEGER,
+                overallStatus TEXT NOT NULL,
+                notes TEXT NOT NULL,
+                inspectedAt INTEGER NOT NULL,
+                FOREIGN KEY(linkedReportId) REFERENCES risk_assessment_reports(id) ON UPDATE NO ACTION ON DELETE SET NULL
+            )
+            """.trimIndent()
+        )
+        rawDb.execSQL("CREATE INDEX IF NOT EXISTS index_inspection_checklists_linkedReportId ON inspection_checklists (linkedReportId)")
+        rawDb.execSQL("CREATE INDEX IF NOT EXISTS index_inspection_checklists_tradeCategory ON inspection_checklists (tradeCategory)")
+        rawDb.execSQL("CREATE INDEX IF NOT EXISTS index_inspection_checklists_overallStatus ON inspection_checklists (overallStatus)")
+        rawDb.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS inspection_checklist_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                checklistId INTEGER NOT NULL,
+                sequenceOrder INTEGER NOT NULL,
+                itemTitle TEXT NOT NULL,
+                standardReference TEXT NOT NULL,
+                resultStatus TEXT NOT NULL,
+                isCriticalStopWork INTEGER NOT NULL,
+                remarks TEXT NOT NULL,
+                photoUri TEXT,
+                checkedAt INTEGER,
+                FOREIGN KEY(checklistId) REFERENCES inspection_checklists(id) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        rawDb.execSQL("CREATE INDEX IF NOT EXISTS index_inspection_checklist_items_checklistId ON inspection_checklist_items (checklistId)")
+        rawDb.execSQL("CREATE INDEX IF NOT EXISTS index_inspection_checklist_items_resultStatus ON inspection_checklist_items (resultStatus)")
+        rawDb.close()
+
+        val migratedDb = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
+            .addMigrations(
+                AppDatabase.MIGRATION_1_2,
+                AppDatabase.MIGRATION_2_3,
+                AppDatabase.MIGRATION_3_4,
+                AppDatabase.MIGRATION_4_5
+            )
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val defectDao = migratedDb.siteWalkDefectDao()
+            val id = defectDao.insertDefect(
+                SiteWalkDefectEntity(
+                    pinNumber = 1,
+                    floorZone = "Level 2 Master Bedroom",
+                    tradeCategory = "OPENINGS",
+                    openingCode = "W1",
+                    measuredInput = "117.5 x 199 cm",
+                    inspectorNote = "Narrower than W1 opening schedule by 25 mm",
+                    severityLevel = "MAJOR",
+                    responsibleParty = "MASONRY",
+                    pinXRatio = 0.42f,
+                    pinYRatio = 0.65f,
+                    inferenceOrigin = "IN_CLOUD"
+                )
+            )
+            assertTrue(id > 0L)
+            assertEquals(1, defectDao.observeOpenDefectCount().first())
+            assertEquals(1, defectDao.getMaxPinNumber())
+
+            defectDao.updateDefectStatus(id, "FIXED")
+            assertEquals(0, defectDao.observeOpenDefectCount().first())
+
+            val saved = defectDao.getAllDefects().first().first()
+            assertEquals("FIXED", saved.status)
+            assertEquals("W1", saved.openingCode)
+
+            defectDao.deleteDefect(saved)
+            assertTrue(defectDao.getAllDefects().first().isEmpty())
+        } finally {
+            migratedDb.close()
+            context.deleteDatabase(dbName)
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `test Nano 4 Site Walk ViewModel defect saving, prompt builder, and offline error reset`() = runTest {
+        val testDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(testDispatcher)
+        try {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            if (FirebaseApp.getApps(context).isEmpty()) {
+                FirebaseApp.initializeApp(
+                    context,
+                    FirebaseOptions.Builder()
+                        .setApplicationId("1:000000000000:android:0000000000000000")
+                        .setApiKey("test-api-key-placeholder")
+                        .setProjectId("test-project-id")
+                        .build()
+                )
+            }
+
+            val aiRepository = GeminiAiRepository()
+            val thPrompt = aiRepository.buildHybridDefectTriagePrompt(
+                floorZone = "ชั้น 2 ห้องนอนใหญ่",
+                tradeCategory = "OPENINGS",
+                openingCode = "W1",
+                measuredInput = "117.5 x 199 ซม.",
+                inspectorNote = "ช่องเปิดปูนแคบกว่าแบบ",
+                language = AppLanguage.TH
+            )
+            assertTrue(thPrompt.contains("NANO 4oK"))
+            assertTrue(thPrompt.contains("W1"))
+            assertTrue(thPrompt.contains("117.5 x 199"))
+
+            val enPrompt = aiRepository.buildHybridDefectTriagePrompt(
+                floorZone = "Level 2 Master Bed",
+                tradeCategory = "OPENINGS",
+                openingCode = "W1",
+                measuredInput = "117.5 x 199 cm",
+                inspectorNote = "Rough opening narrow",
+                language = AppLanguage.EN
+            )
+            assertTrue(enPrompt.contains("MASONRY / ALUMINUM"))
+
+            val repository = CareerShieldRepository(dao, inspectionDao, db.siteWalkDefectDao())
+            val viewModel = CareerShieldViewModel(repository, aiRepository)
+            advanceUntilIdle()
+
+            // Save a defect pin directly into Room DB v5
+            viewModel.saveSiteWalkDefect(
+                floorZone = "Level 2 Master Bedroom",
+                tradeCategory = "OPENINGS",
+                openingCode = "W1",
+                measuredInput = "117.5 x 199 cm",
+                inspectorNote = "Masonry opening narrower than W1 spec",
+                aiAnalysis = "Masonry to chisel 25 mm clearance.",
+                severityLevel = "CRITICAL",
+                responsibleParty = "MASONRY",
+                photoUri = null,
+                pdfPlanUri = null,
+                pdfPageIndex = 0,
+                pinXRatio = 0.5f,
+                pinYRatio = 0.5f,
+                inferenceOrigin = "IN_CLOUD"
+            )
+            advanceUntilIdle()
+
+            val defects = db.siteWalkDefectDao().getAllDefects().first()
+            assertEquals(1, defects.size)
+            assertEquals(1, defects.first().pinNumber)
+            assertEquals("OPEN", defects.first().status)
+
+            viewModel.toggleSiteWalkDefectStatus(defects.first())
+            advanceUntilIdle()
+            assertEquals("FIXED", db.siteWalkDefectDao().getAllDefects().first().first().status)
+
+            // Offline triage fails with OnDeviceUnavailable on JVM, then clears when offline mode disabled
+            viewModel.setOfflineSiteTestMode(true)
+            viewModel.analyzeSiteWalkDefectHybrid(
+                floorZone = "Level 2",
+                tradeCategory = "OPENINGS",
+                openingCode = "W1",
+                measuredInput = "117.5 x 199 cm",
+                inspectorNote = "Check opening tolerance"
+            )
+            advanceUntilIdle()
+
+            val defectErr = viewModel.defectAiState.value
+            assertTrue(defectErr is DefectAiUiState.Error)
+            assertTrue((defectErr as DefectAiUiState.Error).isOnDeviceUnavailable)
+
+            viewModel.setOfflineSiteTestMode(false)
+            assertTrue(viewModel.defectAiState.value is DefectAiUiState.Idle)
         } finally {
             Dispatchers.resetMain()
         }

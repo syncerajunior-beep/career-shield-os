@@ -83,7 +83,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -93,6 +92,10 @@ import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.TaskEntity
+import com.example.ui.localization.AppLanguage
+import com.example.ui.localization.LocalAppLanguage
+import com.example.ui.localization.LocalAppStrings
+import com.example.ui.localization.LocalizedSeedMapper
 import com.example.util.SitePhotoStorage
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -116,6 +119,8 @@ fun TaskListScreen(
     onRunAntiBsCheck: () -> Unit
 ) {
     val context = LocalContext.current
+    val lang = LocalAppLanguage.current
+    val s = LocalAppStrings.current
 
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<TaskEntity?>(null) }
@@ -128,7 +133,7 @@ fun TaskListScreen(
     // Active photo capture state for Add/Edit Task dialog
     var dialogPhotoUri by rememberSaveable { mutableStateOf<String?>(null) }
     var dialogPendingCaptureUri by remember { mutableStateOf<Uri?>(null) }
-    var captureTargetMode by remember { mutableStateOf<String>("NONE") } // "CARD" or "DIALOG"
+    var captureTargetMode by remember { mutableStateOf("NONE") } // "CARD" or "DIALOG"
 
     val takePictureLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
@@ -142,7 +147,7 @@ fun TaskListScreen(
                     onUpdateTaskPhoto(task, uriStr)
                     Toast.makeText(
                         context,
-                        "บันทึกรูปถ่ายจุดเสี่ยงหน้างานลง Room DB แล้ว!",
+                        if (lang == AppLanguage.EN) "Site risk photo saved to Room DB!" else "บันทึกรูปถ่ายจุดเสี่ยงหน้างานลง Room DB แล้ว!",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -152,7 +157,7 @@ fun TaskListScreen(
                     dialogPhotoUri = uriStr
                     Toast.makeText(
                         context,
-                        "ถ่ายรูปหลักฐานหน้างานสำเร็จ!",
+                        if (lang == AppLanguage.EN) "Site evidence photo captured!" else "ถ่ายรูปหลักฐานหน้างานสำเร็จ!",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -196,7 +201,7 @@ fun TaskListScreen(
         } else {
             Toast.makeText(
                 context,
-                "กรุณาอนุญาตการใช้กล้องเพื่อถ่ายรูปหลักฐานจุดเสี่ยงหน้างาน",
+                if (lang == AppLanguage.EN) "Please allow camera permission to capture site hazard photos" else "กรุณาอนุญาตการใช้กล้องเพื่อถ่ายรูปหลักฐานจุดเสี่ยงหน้างาน",
                 Toast.LENGTH_LONG
             ).show()
             targetTaskForPhoto = null
@@ -244,7 +249,7 @@ fun TaskListScreen(
                         onUpdateTaskPhoto(task, savedUri)
                         Toast.makeText(
                             context,
-                            "แนบรูปหลักฐานหน้างานลง Room DB สำเร็จ!",
+                            if (lang == AppLanguage.EN) "Site evidence photo attached to Room DB!" else "แนบรูปหลักฐานหน้างานลง Room DB สำเร็จ!",
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -252,7 +257,11 @@ fun TaskListScreen(
                     dialogPhotoUri = savedUri
                 }
             } else {
-                Toast.makeText(context, "ไม่สามารถบันทึกรูปภาพได้", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (lang == AppLanguage.EN) "Unable to save image" else "ไม่สามารถบันทึกรูปภาพได้",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
         targetTaskForPhoto = null
@@ -288,7 +297,7 @@ fun TaskListScreen(
                     Box(modifier = Modifier.fillMaxWidth()) {
                         Image(
                             painter = painterResource(id = R.drawable.img_construction_hero_1794457161643),
-                            contentDescription = "ภาพพื้นหลังแดชบอร์ดควบคุมงานก่อสร้าง",
+                            contentDescription = s.headerTitle,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -320,11 +329,13 @@ fun TaskListScreen(
                                 Surface(
                                     color = Color(0xFF0A0F1D).copy(alpha = 0.85f),
                                     shape = RoundedCornerShape(20.dp),
-                                    modifier = Modifier.border(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.primary,
-                                        RoundedCornerShape(20.dp)
-                                    )
+                                    modifier = Modifier
+                                        .weight(1f, fill = false)
+                                        .border(
+                                            1.dp,
+                                            MaterialTheme.colorScheme.primary,
+                                            RoundedCornerShape(20.dp)
+                                        )
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
@@ -332,36 +343,38 @@ fun TaskListScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Storage,
-                                            contentDescription = "สถานะฐานข้อมูล Room SQLite",
+                                            contentDescription = s.roomDbStatusBadge,
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(14.dp)
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "Room DB: เก็บข้อมูล & ภาพหน้างานในเครื่อง",
-                                            fontSize = 11.sp,
+                                            text = s.roomDbStatusBadge,
+                                            fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.primary
                                         )
                                     }
                                 }
 
+                                Spacer(modifier = Modifier.width(6.dp))
+
                                 OutlinedButton(
                                     onClick = onResetDay,
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                     modifier = Modifier
-                                        .height(32.dp)
+                                        .height(34.dp)
                                         .testTag("reset_day_button")
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Refresh,
-                                        contentDescription = "รีเซ็ตเช็กลิสต์ประจำวัน",
+                                        contentDescription = s.resetDayButton,
                                         tint = Color.White,
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = stringResource(R.string.reset_day_button),
+                                        text = s.resetDayButton,
                                         fontSize = 11.sp,
                                         color = Color.White
                                     )
@@ -375,15 +388,19 @@ fun TaskListScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.Bottom
                             ) {
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "ความคืบหน้าการป้องกันความเสี่ยงวันนี้",
+                                        text = s.todayProgressLabel,
                                         fontSize = 12.sp,
                                         color = Color(0xFFD1D5DB)
                                     )
                                     Text(
-                                        text = "สำเร็จแล้ว $completedCount / $totalCount ภารกิจ • รูปหลักฐาน $photoEvidenceCount ภาพ",
-                                        fontSize = 15.sp,
+                                        text = if (lang == AppLanguage.EN) {
+                                            "$completedCount / $totalCount completed • $photoEvidenceCount photo(s)"
+                                        } else {
+                                            "สำเร็จแล้ว $completedCount / $totalCount ภารกิจ • รูปหลักฐาน $photoEvidenceCount ภาพ"
+                                        },
+                                        fontSize = 14.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = Color.White
                                     )
@@ -429,13 +446,13 @@ fun TaskListScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "สรุป Daily Remind Log ด้วย Hybrid AI",
+                            contentDescription = s.dailyLogButton,
                             tint = Color(0xFF00E676),
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "สรุป Log ประจำวัน",
+                            text = s.dailyLogButton,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF00E676)
@@ -453,13 +470,13 @@ fun TaskListScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.WarningAmber,
-                            contentDescription = "ตรวจงานซ้ำซ้อน Anti-BS ด้วย Hybrid AI",
+                            contentDescription = s.antiBsButton,
                             tint = Color(0xFFFFB300),
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "ตรวจ Anti-BS ซ้ำซ้อน",
+                            text = s.antiBsButton,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFFFB300)
@@ -468,7 +485,7 @@ fun TaskListScreen(
                 }
             }
 
-            // 2. 3 จุดตายคอขาดบาดตาย (Critical Survival Red Flags)
+            // 2. 3 Critical Survival Red Flags
             item {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
@@ -484,23 +501,26 @@ fun TaskListScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.WarningAmber,
-                                    contentDescription = "คำเตือนจุดตายหน้างาน",
+                                    contentDescription = s.redFlagsTitle,
                                     tint = Color(0xFFFF5252),
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = stringResource(R.string.red_flags_title),
+                                    text = s.redFlagsTitle,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFFF5252)
                                 )
                             }
                             Text(
-                                text = "แตะเพื่อปรึกษา AI",
+                                text = s.tapToConsultAi,
                                 fontSize = 10.sp,
                                 color = Color(0xFF00E5FF),
                                 fontWeight = FontWeight.SemiBold
@@ -510,33 +530,24 @@ fun TaskListScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         RedFlagRow(
-                            text = stringResource(R.string.red_flag_1),
+                            text = s.redFlag1,
                             tag = "red_flag_1_button",
-                            onClick = {
-                                onAnalyzeRedFlagWithAi(
-                                    "ผู้รับเหมาช่วงส่งสัญญาณทิ้งงาน จำนวนช่างลดลงต่อเนื่องเกิน 3 วัน และงานล่าช้ากว่าแผนหลัก ต้องล็อกสัญญาและตัดจ่ายเงินอย่างไรไม่ให้โครงการเสียหาย?"
-                                )
-                            }
+                            aiDesc = s.tapToConsultAi,
+                            onClick = { onAnalyzeRedFlagWithAi(s.redFlag1Prompt) }
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         RedFlagRow(
-                            text = stringResource(R.string.red_flag_2),
+                            text = s.redFlag2,
                             tag = "red_flag_2_button",
-                            onClick = {
-                                onAnalyzeRedFlagWithAi(
-                                    "ผู้ว่าจ้างหรือตัวแทนสั่งแก้งานหน้างานปากเปล่าเร่งด่วนโดยยังไม่มีเอกสาร VO และไม่มีลายเซ็นอนุมัติงบ/เวลาเพิ่ม ต้องรับมือและออกหนังสืออย่างไร?"
-                                )
-                            }
+                            aiDesc = s.tapToConsultAi,
+                            onClick = { onAnalyzeRedFlagWithAi(s.redFlag2Prompt) }
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         RedFlagRow(
-                            text = stringResource(R.string.red_flag_3),
+                            text = s.redFlag3,
                             tag = "red_flag_3_button",
-                            onClick = {
-                                onAnalyzeRedFlagWithAi(
-                                    "โครงการเสี่ยงโดนค่าปรับล่าช้า (LD) วันละ 150,000 บาท เนื่องจากส่งมอบพื้นที่ล่าช้าและฝนตกหนัก ต้องทำหนังสือสงวนสิทธิ์ขอขยายเวลา (EOT) และเก็บหลักฐานอย่างไร?"
-                                )
-                            }
+                            aiDesc = s.tapToConsultAi,
+                            onClick = { onAnalyzeRedFlagWithAi(s.redFlag3Prompt) }
                         )
                     }
                 }
@@ -551,13 +562,13 @@ fun TaskListScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = stringResource(R.string.daily_checkpoints_title),
+                            text = s.dailyCheckpointsTitle,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Text(
-                            text = "พบ ${filteredTasks.size} รายการ",
+                            text = if (lang == AppLanguage.EN) "${filteredTasks.size} items" else "พบ ${filteredTasks.size} รายการ",
                             fontSize = 11.sp,
                             color = Color(0xFF00E5FF)
                         )
@@ -570,7 +581,7 @@ fun TaskListScreen(
                         onValueChange = onSearchQueryChange,
                         placeholder = {
                             Text(
-                                text = "ค้นหาชื่อภารกิจ หรือรายละเอียด (เช่น เทปูน, สต็อก, Cashflow)...",
+                                text = s.taskSearchPlaceholder,
                                 fontSize = 12.sp,
                                 color = Color(0xFF9CA3AF)
                             )
@@ -578,7 +589,7 @@ fun TaskListScreen(
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Search,
-                                contentDescription = "ค้นหาภารกิจ",
+                                contentDescription = s.taskSearchPlaceholder,
                                 tint = Color(0xFF00E5FF)
                             )
                         },
@@ -590,7 +601,7 @@ fun TaskListScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Clear,
-                                        contentDescription = "ล้างคำค้นหา",
+                                        contentDescription = s.btnClose,
                                         tint = Color(0xFFD1D5DB)
                                     )
                                 }
@@ -614,11 +625,11 @@ fun TaskListScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     val categories = listOf(
-                        "ALL" to "ทั้งหมด",
-                        "SAFETY" to "SAFETY (สต็อก/หน้างาน)",
-                        "SLA" to "SLA (ล็อกเวลา)",
-                        "FINANCE" to "FINANCE (การเงิน)",
-                        "CONTRACT" to "CONTRACT (สัญญา)"
+                        "ALL" to s.categoryAll,
+                        "SAFETY" to s.categorySafety,
+                        "SLA" to s.categorySla,
+                        "FINANCE" to s.categoryFinance,
+                        "CONTRACT" to s.categoryContract
                     )
 
                     FlowRow(
@@ -674,23 +685,23 @@ fun TaskListScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "ไม่พบภารกิจที่ตรงกับเงื่อนไข",
+                                contentDescription = s.emptyFilteredTasks,
                                 tint = Color(0xFF00E5FF),
                                 modifier = Modifier.size(36.dp)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = if (searchQuery.isNotBlank() || selectedCategory != "ALL") {
-                                    "ไม่พบภารกิจที่ตรงกับการค้นหาหรือหมวดหมู่ที่เลือก"
+                                    s.emptyFilteredTasks
                                 } else {
-                                    "ยังไม่มีภารกิจในระบบ"
+                                    s.emptyNoTasks
                                 },
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
                             Text(
-                                text = "ลองเปลี่ยนคำค้นหา หมวดหมู่ หรือกดปุ่ม '+ เพิ่มงานใหม่' ด้านล่าง",
+                                text = s.emptyTasksHint,
                                 fontSize = 12.sp,
                                 color = Color(0xFF9CA3AF)
                             )
@@ -703,7 +714,7 @@ fun TaskListScreen(
                                     },
                                     modifier = Modifier.testTag("reset_filters_button")
                                 ) {
-                                    Text("แสดงภารกิจทั้งหมด", color = Color(0xFF00E5FF), fontSize = 12.sp)
+                                    Text(s.showAllTasksBtn, color = Color(0xFF00E5FF), fontSize = 12.sp)
                                 }
                             }
                         }
@@ -714,8 +725,11 @@ fun TaskListScreen(
                     items = filteredTasks,
                     key = { it.id }
                 ) { task ->
+                    val displayTask = LocalizedSeedMapper.mapTask(task, lang)
                     TaskItemCard(
                         task = task,
+                        displayTitle = displayTask.title,
+                        displayDescription = displayTask.description,
                         onToggle = { onToggleTask(task) },
                         onCapturePhoto = { requestCameraForTask(task) },
                         onPickPhoto = {
@@ -727,12 +741,16 @@ fun TaskListScreen(
                         },
                         onViewPhoto = { previewTask = task },
                         onInspectPhotoWithAi = {
-                            task.photoUri?.let { uri -> onInspectPhotoWithAi(uri, task.title) }
+                            task.photoUri?.let { uri -> onInspectPhotoWithAi(uri, displayTask.title) }
                         },
                         onRemovePhoto = {
                             SitePhotoStorage.deletePhotoFileIfLocal(context, task.photoUri)
                             onUpdateTaskPhoto(task, null)
-                            Toast.makeText(context, "ลบรูปหลักฐานออกจากภารกิจแล้ว", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                if (lang == AppLanguage.EN) "Evidence photo removed from checkpoint" else "ลบรูปหลักฐานออกจากภารกิจแล้ว",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         },
                         onEdit = {
                             dialogPhotoUri = task.photoUri
@@ -766,11 +784,11 @@ fun TaskListScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = stringResource(R.string.add_task_button)
+                    contentDescription = s.addTaskButton
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = stringResource(R.string.add_task_button),
+                    text = s.addTaskButton,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 13.sp
                 )
@@ -780,8 +798,8 @@ fun TaskListScreen(
 
     if (showAddDialog) {
         TaskFormDialog(
-            dialogTitle = "เพิ่มภารกิจใหม่ลง Room DB",
-            confirmButtonText = "บันทึกลงเครื่อง",
+            dialogTitle = s.addTaskDialogTitle,
+            confirmButtonText = s.saveToDeviceBtn,
             initialTitle = "",
             initialDescription = "",
             initialCategory = "SAFETY",
@@ -815,14 +833,15 @@ fun TaskListScreen(
     }
 
     editingTask?.let { taskToEdit ->
-        val rawTitleWithoutTime = remember(taskToEdit.title) {
-            taskToEdit.title.replace(Regex("^\\d{2}:\\d{2}\\s*"), "")
+        val displayTaskToEdit = LocalizedSeedMapper.mapTask(taskToEdit, lang)
+        val rawTitleWithoutTime = remember(displayTaskToEdit.title) {
+            displayTaskToEdit.title.replace(Regex("^\\d{2}:\\d{2}\\s*"), "")
         }
         TaskFormDialog(
-            dialogTitle = "แก้ไขภารกิจใน Room DB",
-            confirmButtonText = "บันทึกการแก้ไข",
+            dialogTitle = s.editTaskDialogTitle,
+            confirmButtonText = s.saveChangesBtn,
             initialTitle = rawTitleWithoutTime,
-            initialDescription = taskToEdit.description,
+            initialDescription = displayTaskToEdit.description,
             initialCategory = taskToEdit.category,
             initialTimeSlot = taskToEdit.timeSlot,
             photoUri = dialogPhotoUri,
@@ -857,8 +876,10 @@ fun TaskListScreen(
 
     previewTask?.let { taskWithPhoto ->
         if (!taskWithPhoto.photoUri.isNullOrBlank()) {
+            val displayPreviewTask = LocalizedSeedMapper.mapTask(taskWithPhoto, lang)
             SitePhotoPreviewDialog(
                 task = taskWithPhoto,
+                displayTitle = displayPreviewTask.title,
                 onDismiss = { previewTask = null },
                 onRetakePhoto = {
                     previewTask = null
@@ -868,7 +889,11 @@ fun TaskListScreen(
                     SitePhotoStorage.deletePhotoFileIfLocal(context, taskWithPhoto.photoUri)
                     onUpdateTaskPhoto(taskWithPhoto, null)
                     previewTask = null
-                    Toast.makeText(context, "ลบรูปหลักฐานหน้างานแล้ว", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        if (lang == AppLanguage.EN) "Site evidence photo deleted" else "ลบรูปหลักฐานหน้างานแล้ว",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             )
         }
@@ -879,6 +904,7 @@ fun TaskListScreen(
 private fun RedFlagRow(
     text: String,
     tag: String,
+    aiDesc: String,
     onClick: () -> Unit
 ) {
     Surface(
@@ -906,7 +932,7 @@ private fun RedFlagRow(
             Spacer(modifier = Modifier.width(8.dp))
             Icon(
                 imageVector = Icons.Default.AutoAwesome,
-                contentDescription = "วิเคราะห์จุดตายนี้ด้วย Gemini AI",
+                contentDescription = aiDesc,
                 tint = Color(0xFF00E5FF),
                 modifier = Modifier.size(16.dp)
             )
@@ -918,6 +944,8 @@ private fun RedFlagRow(
 @Composable
 private fun TaskItemCard(
     task: TaskEntity,
+    displayTitle: String,
+    displayDescription: String,
     onToggle: () -> Unit,
     onCapturePhoto: () -> Unit,
     onPickPhoto: () -> Unit,
@@ -927,6 +955,7 @@ private fun TaskItemCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val s = LocalAppStrings.current
     val badgeColor = when (task.category.uppercase()) {
         "SAFETY" -> Color(0xFF00E676)
         "SLA" -> Color(0xFFFFB300)
@@ -993,7 +1022,7 @@ private fun TaskItemCard(
                         }
                         if (task.isCompleted) {
                             Text(
-                                text = "✓ บันทึกสำเร็จใน Room DB",
+                                text = s.savedInRoomBadge,
                                 fontSize = 10.sp,
                                 color = Color(0xFF00E676),
                                 fontWeight = FontWeight.SemiBold
@@ -1002,15 +1031,15 @@ private fun TaskItemCard(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = task.title,
+                        text = displayTitle,
                         fontSize = 13.sp,
                         color = if (task.isCompleted) Color(0xFF9CA3AF) else Color.White,
                         fontWeight = FontWeight.Bold,
                         textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                     )
-                    AnimatedVisibility(visible = task.description.isNotBlank()) {
+                    AnimatedVisibility(visible = displayDescription.isNotBlank()) {
                         Text(
-                            text = task.description,
+                            text = displayDescription,
                             fontSize = 11.sp,
                             color = if (task.isCompleted) Color(0xFF6B7280) else Color(0xFFD1D5DB),
                             lineHeight = 16.sp,
@@ -1027,7 +1056,7 @@ private fun TaskItemCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Edit,
-                            contentDescription = "แก้ไขภารกิจ ${task.title}",
+                            contentDescription = displayTitle,
                             tint = Color(0xFF00E5FF)
                         )
                     }
@@ -1039,7 +1068,7 @@ private fun TaskItemCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "ลบภารกิจ ${task.title}",
+                            contentDescription = displayTitle,
                             tint = Color(0xFFFF5252)
                         )
                     }
@@ -1067,7 +1096,7 @@ private fun TaskItemCard(
                     ) {
                         AsyncImage(
                             model = Uri.parse(task.photoUri),
-                            contentDescription = "ภาพถ่ายหลักฐานความเสี่ยงหน้างานของ ${task.title}",
+                            contentDescription = displayTitle,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .size(68.dp)
@@ -1079,20 +1108,20 @@ private fun TaskItemCard(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = Icons.Default.Verified,
-                                    contentDescription = "บันทึกหลักฐานรูปถ่ายแล้ว",
+                                    contentDescription = s.photoSavedRoomTitle,
                                     tint = Color(0xFF00E676),
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "บันทึกภาพถ่ายหน้างานลง Room DB แล้ว",
+                                    text = s.photoSavedRoomTitle,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF00E676)
                                 )
                             }
                             Text(
-                                text = "แตะเพื่อดูภาพขนาดเต็ม หรือถ่ายใหม่",
+                                text = s.photoTapToPreview,
                                 fontSize = 10.sp,
                                 color = Color(0xFF9CA3AF),
                                 modifier = Modifier.padding(top = 2.dp)
@@ -1116,12 +1145,12 @@ private fun TaskItemCard(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.AutoAwesome,
-                                            contentDescription = "สแกนภาพจุดเสี่ยงด้วย Cloud Gemini",
+                                            contentDescription = s.scanPhotoAiBtn,
                                             tint = Color(0xFF00E5FF),
                                             modifier = Modifier.size(13.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("สแกนรูป AI", fontSize = 10.sp, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                                        Text(s.scanPhotoAiBtn, fontSize = 10.sp, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 Surface(
@@ -1137,12 +1166,12 @@ private fun TaskItemCard(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.CameraAlt,
-                                            contentDescription = "ถ่ายรูปใหม่",
+                                            contentDescription = s.retakePhotoBtn,
                                             tint = Color(0xFF00E5FF),
                                             modifier = Modifier.size(13.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("ถ่ายใหม่", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                        Text(s.retakePhotoBtn, fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 Surface(
@@ -1158,12 +1187,12 @@ private fun TaskItemCard(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Close,
-                                            contentDescription = "ลบรูปหลักฐาน",
+                                            contentDescription = s.removePhotoBtn,
                                             tint = Color(0xFFFF5252),
                                             modifier = Modifier.size(13.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("ลบรูป", fontSize = 10.sp, color = Color(0xFFFF5252), fontWeight = FontWeight.Bold)
+                                        Text(s.removePhotoBtn, fontSize = 10.sp, color = Color(0xFFFF5252), fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -1186,13 +1215,13 @@ private fun TaskItemCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.AddAPhoto,
-                            contentDescription = "ถ่ายรูปจุดเสี่ยงหน้างาน",
+                            contentDescription = s.captureSiteRiskPhotoBtn,
                             tint = Color(0xFF00E5FF),
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "ถ่ายรูปจุดเสี่ยงหน้างาน",
+                            text = s.captureSiteRiskPhotoBtn,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF00E5FF)
@@ -1209,13 +1238,13 @@ private fun TaskItemCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.PhotoLibrary,
-                            contentDescription = "เลือกรูปจากคลัง",
+                            contentDescription = s.galleryBtn,
                             tint = Color(0xFFD1D5DB),
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "คลังภาพ",
+                            text = s.galleryBtn,
                             fontSize = 11.sp,
                             color = Color(0xFFD1D5DB)
                         )
@@ -1229,10 +1258,12 @@ private fun TaskItemCard(
 @Composable
 private fun SitePhotoPreviewDialog(
     task: TaskEntity,
+    displayTitle: String,
     onDismiss: () -> Unit,
     onRetakePhoto: () -> Unit,
     onDeletePhoto: () -> Unit
 ) {
+    val s = LocalAppStrings.current
     Dialog(onDismissRequest = onDismiss) {
         Card(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
@@ -1248,10 +1279,11 @@ private fun SitePhotoPreviewDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "📷 หลักฐานภาพถ่ายจุดเสี่ยงหน้างาน",
+                        text = s.photoPreviewDialogTitle,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF00E5FF)
+                        color = Color(0xFF00E5FF),
+                        modifier = Modifier.weight(1f)
                     )
                     IconButton(
                         onClick = onDismiss,
@@ -1259,14 +1291,14 @@ private fun SitePhotoPreviewDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "ปิดหน้าต่างภาพถ่าย",
+                            contentDescription = s.btnClose,
                             tint = Color.White
                         )
                     }
                 }
 
                 Text(
-                    text = task.title,
+                    text = displayTitle,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White
@@ -1276,7 +1308,7 @@ private fun SitePhotoPreviewDialog(
 
                 AsyncImage(
                     model = Uri.parse(task.photoUri),
-                    contentDescription = "ภาพถ่ายหลักฐานเต็มจอ",
+                    contentDescription = displayTitle,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1301,11 +1333,11 @@ private fun SitePhotoPreviewDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.CameraAlt,
-                            contentDescription = "ถ่ายรูปใหม่",
+                            contentDescription = s.retakePhotoBtn,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("ถ่ายรูปใหม่", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(s.retakePhotoBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
 
                     OutlinedButton(
@@ -1314,12 +1346,12 @@ private fun SitePhotoPreviewDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "ลบรูปภาพ",
+                            contentDescription = s.deletePhotoBtn,
                             tint = Color(0xFFFF5252),
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("ลบรูปภาพ", fontSize = 12.sp, color = Color(0xFFFF5252))
+                        Text(s.deletePhotoBtn, fontSize = 12.sp, color = Color(0xFFFF5252))
                     }
                 }
             }
@@ -1347,6 +1379,7 @@ private fun TaskFormDialog(
     onDismiss: () -> Unit,
     onConfirm: (title: String, description: String, category: String, timeSlot: String) -> Unit
 ) {
+    val s = LocalAppStrings.current
     var title by rememberSaveable(initialTitle) { mutableStateOf(initialTitle) }
     var description by rememberSaveable(initialDescription) { mutableStateOf(initialDescription) }
     var category by rememberSaveable(initialCategory) { mutableStateOf(initialCategory) }
@@ -1374,7 +1407,7 @@ private fun TaskFormDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "เลือกเวลาแจ้งเตือนหน้างาน:",
+                    text = s.dialogTimeLabel,
                     fontSize = 12.sp,
                     color = Color(0xFFD1D5DB)
                 )
@@ -1403,7 +1436,7 @@ private fun TaskFormDialog(
                 }
 
                 Text(
-                    text = "หมวดหมู่ความเสี่ยง:",
+                    text = s.dialogCategoryLabel,
                     fontSize = 12.sp,
                     color = Color(0xFFD1D5DB)
                 )
@@ -1434,8 +1467,8 @@ private fun TaskFormDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("ชื่อภารกิจเช็กลิสต์", color = Color(0xFF9CA3AF)) },
-                    placeholder = { Text("เช่น ตรวจระดับหัวเสาเข็มก่อนเทฟุตติ้ง", color = Color(0xFF6B7280)) },
+                    label = { Text(s.dialogTaskTitleLabel, color = Color(0xFF9CA3AF)) },
+                    placeholder = { Text(s.dialogTaskTitlePlaceholder, color = Color(0xFF6B7280)) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
@@ -1451,8 +1484,8 @@ private fun TaskFormDialog(
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("รายละเอียดการป้องกันปัญหา", color = Color(0xFF9CA3AF)) },
-                    placeholder = { Text("เช่น ถ่ายรูป Timestamp Camera พร้อมให้โฟร์แมนเซ็นรับทราบ", color = Color(0xFF6B7280)) },
+                    label = { Text(s.dialogTaskDescLabel, color = Color(0xFF9CA3AF)) },
+                    placeholder = { Text(s.dialogTaskDescPlaceholder, color = Color(0xFF6B7280)) },
                     minLines = 2,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
@@ -1467,7 +1500,7 @@ private fun TaskFormDialog(
 
                 // Optional Site Photo Attachment inside Dialog
                 Text(
-                    text = "รูปถ่ายหลักฐานความเสี่ยงหน้างาน (บันทึกลง Room DB):",
+                    text = s.dialogPhotoSectionLabel,
                     fontSize = 12.sp,
                     color = Color(0xFFD1D5DB)
                 )
@@ -1482,7 +1515,7 @@ private fun TaskFormDialog(
                     ) {
                         AsyncImage(
                             model = Uri.parse(photoUri),
-                            contentDescription = "รูปถ่ายจุดเสี่ยงที่จะบันทึก",
+                            contentDescription = s.dialogPhotoReady,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .size(56.dp)
@@ -1491,7 +1524,7 @@ private fun TaskFormDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "พร้อมบันทึกรูปลง Room DB",
+                                text = s.dialogPhotoReady,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF00E676)
@@ -1501,13 +1534,13 @@ private fun TaskFormDialog(
                                     onClick = onCapturePhoto,
                                     contentPadding = PaddingValues(horizontal = 4.dp)
                                 ) {
-                                    Text("ถ่ายใหม่", fontSize = 11.sp, color = Color(0xFF00E5FF))
+                                    Text(s.retakePhotoBtn, fontSize = 11.sp, color = Color(0xFF00E5FF))
                                 }
                                 TextButton(
                                     onClick = onRemovePhoto,
                                     contentPadding = PaddingValues(horizontal = 4.dp)
                                 ) {
-                                    Text("ลบรูป", fontSize = 11.sp, color = Color(0xFFFF5252))
+                                    Text(s.removePhotoBtn, fontSize = 11.sp, color = Color(0xFFFF5252))
                                 }
                             }
                         }
@@ -1525,12 +1558,12 @@ private fun TaskFormDialog(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AddAPhoto,
-                                contentDescription = "ถ่ายรูปจุดเสี่ยง",
+                                contentDescription = s.dialogCaptureBtn,
                                 tint = Color(0xFF00E5FF),
                                 modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("ถ่ายรูป", fontSize = 11.sp, color = Color(0xFF00E5FF))
+                            Text(s.dialogCaptureBtn, fontSize = 11.sp, color = Color(0xFF00E5FF))
                         }
                         OutlinedButton(
                             onClick = onPickPhoto,
@@ -1540,12 +1573,12 @@ private fun TaskFormDialog(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PhotoLibrary,
-                                contentDescription = "เลือกจากคลัง",
+                                contentDescription = s.galleryBtn,
                                 tint = Color.White,
                                 modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("คลังภาพ", fontSize = 11.sp, color = Color.White)
+                            Text(s.galleryBtn, fontSize = 11.sp, color = Color.White)
                         }
                     }
                 }
@@ -1572,7 +1605,7 @@ private fun TaskFormDialog(
                 onClick = onDismiss,
                 modifier = Modifier.testTag(cancelButtonTag)
             ) {
-                Text("ยกเลิก", color = Color(0xFFD1D5DB))
+                Text(s.btnCancel, color = Color(0xFFD1D5DB))
             }
         }
     )

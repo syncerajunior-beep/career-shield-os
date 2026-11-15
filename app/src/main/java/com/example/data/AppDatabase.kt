@@ -7,7 +7,6 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-// 3. ตัวเชื่อมฐานข้อมูล Room Database
 @Database(
     entities = [
         TaskEntity::class,
@@ -15,14 +14,16 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ExceptionAuditEntity::class,
         RiskAssessmentReportEntity::class,
         InspectionChecklistEntity::class,
-        InspectionChecklistItemEntity::class
+        InspectionChecklistItemEntity::class,
+        SiteWalkDefectEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
     abstract fun inspectionDao(): InspectionDao
+    abstract fun siteWalkDefectDao(): SiteWalkDefectDao
 
     companion object {
         @Volatile
@@ -125,6 +126,39 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS site_walk_defects (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        pinNumber INTEGER NOT NULL,
+                        floorZone TEXT NOT NULL,
+                        tradeCategory TEXT NOT NULL,
+                        openingCode TEXT NOT NULL,
+                        measuredInput TEXT NOT NULL,
+                        inspectorNote TEXT NOT NULL,
+                        aiAnalysis TEXT NOT NULL,
+                        severityLevel TEXT NOT NULL,
+                        responsibleParty TEXT NOT NULL,
+                        photoUri TEXT,
+                        pdfPlanUri TEXT,
+                        pdfPageIndex INTEGER NOT NULL,
+                        pinXRatio REAL,
+                        pinYRatio REAL,
+                        inferenceOrigin TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        capturedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_site_walk_defects_tradeCategory ON site_walk_defects (tradeCategory)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_site_walk_defects_severityLevel ON site_walk_defects (severityLevel)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_site_walk_defects_status ON site_walk_defects (status)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_site_walk_defects_capturedAt ON site_walk_defects (capturedAt)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -132,7 +166,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "career_shield_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration(true)
                     .build()
                 INSTANCE = instance

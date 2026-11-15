@@ -1,6 +1,6 @@
 {
-  "name": "Career Shield",
-  "description": "ระบบปฏิบัติการคุมงานก่อสร้างบน Android (Room DB + Firebase AI Logic Hybrid Inference: Gemini Nano 4 ออฟไลน์ + Cloud Gemini Fallback)",
+  "name": "NANO 4oK",
+  "description": "NANO 4oK: Home Inspector & Site Intelligence powered by Gemini Nano 4 & Cloud Multimodal AI — All-OK across Precision Inspection, Site Management, Evidence Vault, and Smart Consultant.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Career Shield"
+rootProject.name = "NANO 4oK"
 
 include(":app")

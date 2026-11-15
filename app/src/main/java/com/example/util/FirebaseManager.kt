@@ -85,4 +85,62 @@ object FirebaseManager {
     }
 
     fun isAppCheckInitialized(): Boolean = appCheckInitialized
+
+    /**
+     * Reads the active App Check debug UUID persisted by [DebugAppCheckProviderFactory]
+     * in SharedPreferences so users sideloading a Debug APK on a physical device can copy
+     * and register it in Firebase Console -> App Check -> Manage debug tokens without needing adb logcat.
+     */
+    fun getDebugSecret(context: Context): String? {
+        if (!BuildConfig.DEBUG) return null
+        return try {
+            val appContext = context.applicationContext ?: context
+            if (FirebaseApp.getApps(appContext).isEmpty()) return null
+            val persistenceKey = FirebaseApp.getInstance().persistenceKey
+            val prefs = appContext.getSharedPreferences(
+                "$DEBUG_STORE_PREFIX$persistenceKey",
+                Context.MODE_PRIVATE
+            )
+            prefs.getString(DEBUG_SECRET_KEY, null)?.takeIf { it.isNotBlank() }
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to read App Check debug secret", e)
+            null
+        }
+    }
+
+    /**
+     * Ensures a debug UUID is generated (if missing) by requesting an App Check token,
+     * then returns the persisted local debug UUID via [onResult].
+     */
+    fun fetchOrCreateDebugSecret(context: Context, onResult: (String?) -> Unit) {
+        if (!BuildConfig.DEBUG) {
+            onResult(null)
+            return
+        }
+        val existing = getDebugSecret(context)
+        if (!existing.isNullOrBlank()) {
+            onResult(existing)
+            return
+        }
+        try {
+            if (!appCheckInitialized) {
+                initializeAppCheck(context, null)
+            }
+            FirebaseAppCheck.getInstance()
+                .getAppCheckToken(false)
+                .addOnCompleteListener {
+                    onResult(getDebugSecret(context))
+                }
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to trigger App Check debug secret generation", e)
+            onResult(getDebugSecret(context))
+        }
+    }
+
+    fun isAppCheckError(errorMessage: String?): Boolean {
+        if (errorMessage.isNullOrBlank()) return false
+        return errorMessage.contains("App Check", ignoreCase = true) ||
+            errorMessage.contains("attestation", ignoreCase = true) ||
+            errorMessage.contains("HTTP 403", ignoreCase = true)
+    }
 }

@@ -37,6 +37,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +53,11 @@ import androidx.compose.ui.unit.sp
 import com.example.data.ChecklistWithItems
 import com.example.data.InspectionChecklistEntity
 import com.example.data.RiskAssessmentReportEntity
+import com.example.ui.localization.AppLanguage
+import com.example.ui.localization.LocalAppLanguage
+import com.example.ui.localization.LocalAppStrings
+import com.example.ui.localization.LocalizedSeedMapper
+import com.example.ui.localization.appStrings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -82,6 +88,8 @@ fun RiskInspectionRoomPanel(
     onSetInspectionItemResult: (checklistId: Long, itemId: Long, resultStatus: String) -> Unit,
     onDeleteInspectionChecklist: (InspectionChecklistEntity) -> Unit
 ) {
+    val lang = LocalAppLanguage.current
+    val s = LocalAppStrings.current
     val dateFormatter = remember { SimpleDateFormat("dd/MM HH:mm", Locale.US) }
 
     var showNewReportForm by rememberSaveable { mutableStateOf(false) }
@@ -95,7 +103,14 @@ fun RiskInspectionRoomPanel(
     var newChecklistZone by rememberSaveable { mutableStateOf("") }
     var newChecklistTrade by rememberSaveable { mutableStateOf("SAFETY") }
     var newChecklistItemsText by rememberSaveable {
-        mutableStateOf("ตรวจสายรัดนิรภัย 100%\nตรวจป้าย Tag นั่งร้าน\nตรวจพื้นที่กั้นเขตอันตราย")
+        mutableStateOf(s.defaultChecklistItemsText)
+    }
+
+    LaunchedEffect(lang) {
+        val otherLang = if (lang == AppLanguage.TH) AppLanguage.EN else AppLanguage.TH
+        if (newChecklistItemsText == appStrings(otherLang).defaultChecklistItemsText) {
+            newChecklistItemsText = s.defaultChecklistItemsText
+        }
     }
 
     Column(
@@ -125,23 +140,23 @@ fun RiskInspectionRoomPanel(
                     ) {
                         Icon(
                             imageVector = Icons.Default.ReportProblem,
-                            contentDescription = "ฐานข้อมูลรายงานประเมินความเสี่ยงก่อสร้าง",
+                            contentDescription = s.riskReportsTitle,
                             tint = Color(0xFFFF7043),
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "ฐานข้อมูลรายงานความเสี่ยง (Risk Reports: ${riskReports.size})",
+                                text = "${s.riskReportsTitle} ${riskReports.size})",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White
                             )
                             Text(
                                 text = if (openCriticalReportCount > 0) {
-                                    "⚠️ วิกฤตเปิดอยู่ $openCriticalReportCount รายการ (Room v4)"
+                                    String.format(Locale.US, s.riskReportsOpenCritical, openCriticalReportCount)
                                 } else {
-                                    "จัดเก็บถาวรใน SQLite • risk_assessment_reports"
+                                    s.riskReportsSubDefault
                                 },
                                 fontSize = 10.sp,
                                 color = if (openCriticalReportCount > 0) Color(0xFFFF8A80) else Color(0xFF9CA3AF)
@@ -158,13 +173,13 @@ fun RiskInspectionRoomPanel(
                     ) {
                         Icon(
                             imageVector = if (showNewReportForm) Icons.Default.Close else Icons.Default.Add,
-                            contentDescription = if (showNewReportForm) "ปิดฟอร์มเพิ่มรายงาน" else "เพิ่มรายงานความเสี่ยง",
+                            contentDescription = if (showNewReportForm) s.btnClose else s.btnCreateReport,
                             tint = Color(0xFFFFAB91),
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (showNewReportForm) "ปิด" else "สร้างรายงาน",
+                            text = if (showNewReportForm) s.btnClose else s.btnCreateReport,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFFFAB91)
@@ -180,7 +195,7 @@ fun RiskInspectionRoomPanel(
                         OutlinedTextField(
                             value = newReportZone,
                             onValueChange = { newReportZone = it },
-                            label = { Text("โซน / ชั้นหน้างาน (Site Zone)", fontSize = 11.sp, color = Color(0xFF9CA3AF)) },
+                            label = { Text(s.reportZoneLabel, fontSize = 11.sp, color = Color(0xFF9CA3AF)) },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = Color.White,
@@ -216,7 +231,7 @@ fun RiskInspectionRoomPanel(
                         OutlinedTextField(
                             value = newReportHazard,
                             onValueChange = { newReportHazard = it },
-                            label = { Text("ความเสี่ยงที่ตรวจพบ (Hazard Summary)", fontSize = 11.sp, color = Color(0xFF9CA3AF)) },
+                            label = { Text(s.reportHazardLabel, fontSize = 11.sp, color = Color(0xFF9CA3AF)) },
                             minLines = 2,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = Color.White,
@@ -232,7 +247,7 @@ fun RiskInspectionRoomPanel(
                         OutlinedTextField(
                             value = newReportMitigation,
                             onValueChange = { newReportMitigation = it },
-                            label = { Text("แผนแก้ไข / มาตรการป้องกัน", fontSize = 11.sp, color = Color(0xFF9CA3AF)) },
+                            label = { Text(s.reportMitigationLabel, fontSize = 11.sp, color = Color(0xFF9CA3AF)) },
                             minLines = 2,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = Color.White,
@@ -270,7 +285,7 @@ fun RiskInspectionRoomPanel(
                                 .height(48.dp)
                                 .testTag("submit_new_risk_report_button")
                         ) {
-                            Text("บันทึกรายงานความเสี่ยงลง Room DB", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(s.submitRiskReportBtn, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
                         }
                     }
                 }
@@ -279,7 +294,7 @@ fun RiskInspectionRoomPanel(
 
                 if (riskReports.isEmpty()) {
                     Text(
-                        text = "ยังไม่มีรายงานประเมินความเสี่ยงที่บันทึกไว้ — กด \"สร้างรายงาน\" หรือบันทึกจากผลวิเคราะห์ Safety AI ด้านบนได้ทันที",
+                        text = s.riskReportsEmpty,
                         fontSize = 11.sp,
                         color = Color(0xFFD1D5DB),
                         lineHeight = 16.sp
@@ -298,6 +313,9 @@ fun RiskInspectionRoomPanel(
                                 "STOP_WORK" -> Color(0xFFFF5252)
                                 else -> Color(0xFFFFB300)
                             }
+                            val displayZone = LocalizedSeedMapper.mapRiskZone(report.siteZone, lang)
+                            val displayMitigation = LocalizedSeedMapper.mapRiskMitigation(report.mitigationPlan, lang)
+
                             Surface(
                                 color = Color(0xFF0B1324),
                                 shape = RoundedCornerShape(10.dp),
@@ -355,7 +373,7 @@ fun RiskInspectionRoomPanel(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.DeleteOutline,
-                                                contentDescription = "ลบรายงานความเสี่ยง ${report.reportCode}",
+                                                contentDescription = report.reportCode,
                                                 tint = Color(0xFF9CA3AF),
                                                 modifier = Modifier.size(18.dp)
                                             )
@@ -363,21 +381,21 @@ fun RiskInspectionRoomPanel(
                                     }
 
                                     Text(
-                                        text = "${report.siteZone} • ${report.hazardSummary}",
+                                        text = "$displayZone • ${report.hazardSummary}",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "แผนแก้ไข: ${report.mitigationPlan}",
+                                        text = "${s.mitigationPrefix} $displayMitigation",
                                         fontSize = 11.sp,
                                         color = Color(0xFFD1D5DB),
                                         lineHeight = 16.sp
                                     )
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
-                                        text = "${dateFormatter.format(Date(report.createdAt))} • แหล่งข้อมูล: ${report.inferenceOrigin}",
+                                        text = "${dateFormatter.format(Date(report.createdAt))} • ${s.sourcePrefix} ${report.inferenceOrigin}",
                                         fontSize = 10.sp,
                                         color = Color(0xFF9CA3AF)
                                     )
@@ -398,13 +416,13 @@ fun RiskInspectionRoomPanel(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.CheckCircle,
-                                                contentDescription = "สลับสถานะแก้ไขแล้ว",
+                                                contentDescription = s.closeMitigatedBtn,
                                                 tint = if (isMitigated) Color(0xFFFFB300) else Color(0xFF00E676),
                                                 modifier = Modifier.size(14.dp)
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text(
-                                                text = if (isMitigated) "เปิดเคสใหม่" else "ปิดเคส (แก้ไขแล้ว)",
+                                                text = if (isMitigated) s.reopenCaseBtn else s.closeMitigatedBtn,
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = if (isMitigated) Color(0xFFFFB300) else Color(0xFF00E676)
@@ -420,7 +438,7 @@ fun RiskInspectionRoomPanel(
                                                     .testTag("mark_report_stop_work_${report.id}")
                                             ) {
                                                 Text(
-                                                    text = "สั่ง Stop-Work",
+                                                    text = s.stopWorkBtn,
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = Color(0xFFFF5252)
@@ -457,20 +475,20 @@ fun RiskInspectionRoomPanel(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.FactCheck,
-                            contentDescription = "เช็กลิสต์ตรวจรับงานหน้างาน",
+                            contentDescription = s.checklistsTitle,
                             tint = Color(0xFF00E5FF),
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "เช็กลิสต์ตรวจรับหน้างาน (Checklists: ${checklistsWithItems.size})",
+                                text = "${s.checklistsTitle}${checklistsWithItems.size})",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White
                             )
                             Text(
-                                text = "Relational Schema • inspection_checklists -> checklist_items",
+                                text = s.checklistsSubtitle,
                                 fontSize = 10.sp,
                                 color = Color(0xFF38BDF8)
                             )
@@ -486,13 +504,13 @@ fun RiskInspectionRoomPanel(
                     ) {
                         Icon(
                             imageVector = if (showNewChecklistForm) Icons.Default.Close else Icons.Default.Add,
-                            contentDescription = if (showNewChecklistForm) "ปิดฟอร์มสร้างเช็กลิสต์" else "เพิ่มเช็กลิสต์ตรวจรับ",
+                            contentDescription = if (showNewChecklistForm) s.btnClose else s.btnCreateChecklist,
                             tint = Color(0xFF00E5FF),
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (showNewChecklistForm) "ปิด" else "สร้างชุดตรวจ",
+                            text = if (showNewChecklistForm) s.btnClose else s.btnCreateChecklist,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF00E5FF)
@@ -508,7 +526,7 @@ fun RiskInspectionRoomPanel(
                         OutlinedTextField(
                             value = newChecklistTitle,
                             onValueChange = { newChecklistTitle = it },
-                            label = { Text("ชื่อชุดเช็กลิสต์ตรวจรับงาน", fontSize = 11.sp, color = Color(0xFF9CA3AF)) },
+                            label = { Text(s.checklistTitleLabel, fontSize = 11.sp, color = Color(0xFF9CA3AF)) },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = Color.White,
@@ -524,7 +542,7 @@ fun RiskInspectionRoomPanel(
                         OutlinedTextField(
                             value = newChecklistZone,
                             onValueChange = { newChecklistZone = it },
-                            label = { Text("โซน / ชั้นหน้างาน", fontSize = 11.sp, color = Color(0xFF9CA3AF)) },
+                            label = { Text(s.checklistZoneLabel, fontSize = 11.sp, color = Color(0xFF9CA3AF)) },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = Color.White,
@@ -560,7 +578,7 @@ fun RiskInspectionRoomPanel(
                         OutlinedTextField(
                             value = newChecklistItemsText,
                             onValueChange = { newChecklistItemsText = it },
-                            label = { Text("รายการตรวจ (1 บรรทัด = 1 หัวข้อ)", fontSize = 11.sp, color = Color(0xFF9CA3AF)) },
+                            label = { Text(s.checklistItemsLabel, fontSize = 11.sp, color = Color(0xFF9CA3AF)) },
                             minLines = 3,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = Color.White,
@@ -599,7 +617,7 @@ fun RiskInspectionRoomPanel(
                                 .height(48.dp)
                                 .testTag("submit_new_checklist_button")
                         ) {
-                            Text("บันทึกชุดเช็กลิสต์ลง Room DB", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(s.submitChecklistBtn, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
                         }
                     }
                 }
@@ -616,6 +634,17 @@ fun RiskInspectionRoomPanel(
                             "FAILED_HOLD" -> Color(0xFFFF5252)
                             else -> Color(0xFFFFB300)
                         }
+                        val displayTitle = LocalizedSeedMapper.mapChecklistTitle(
+                            checklist.checklistCode,
+                            checklist.title,
+                            lang
+                        )
+                        val displayMeta = LocalizedSeedMapper.mapChecklistMeta(
+                            checklist.checklistCode,
+                            checklist.siteZone,
+                            checklist.inspectorName,
+                            lang
+                        )
 
                         Surface(
                             color = Color(0xFF0B1324),
@@ -638,7 +667,7 @@ fun RiskInspectionRoomPanel(
                                     ) {
                                         Icon(
                                             imageVector = Icons.AutoMirrored.Filled.Assignment,
-                                            contentDescription = "ชุดตรวจ ${checklist.checklistCode}",
+                                            contentDescription = checklist.checklistCode,
                                             tint = Color(0xFF00E5FF),
                                             modifier = Modifier.size(16.dp)
                                         )
@@ -655,7 +684,7 @@ fun RiskInspectionRoomPanel(
                                             )
                                         }
                                         Text(
-                                            text = "${checklist.tradeCategory} • $passedCount/${sortedItems.size} PASS",
+                                            text = "${checklist.tradeCategory} • $passedCount/${sortedItems.size} ${s.passRateLabel}",
                                             fontSize = 10.sp,
                                             color = Color(0xFF9CA3AF)
                                         )
@@ -669,7 +698,7 @@ fun RiskInspectionRoomPanel(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.DeleteOutline,
-                                            contentDescription = "ลบเช็กลิสต์ ${checklist.title}",
+                                            contentDescription = displayTitle,
                                             tint = Color(0xFF9CA3AF),
                                             modifier = Modifier.size(18.dp)
                                         )
@@ -677,13 +706,13 @@ fun RiskInspectionRoomPanel(
                                 }
 
                                 Text(
-                                    text = checklist.title,
+                                    text = displayTitle,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
                                 Text(
-                                    text = "${checklist.checklistCode} • ${checklist.siteZone} • ${checklist.inspectorName}",
+                                    text = displayMeta,
                                     fontSize = 10.sp,
                                     color = Color(0xFF9CA3AF)
                                 )
@@ -697,6 +726,12 @@ fun RiskInspectionRoomPanel(
                                             "FAIL" -> Color(0xFFFF5252)
                                             else -> Color(0xFF9CA3AF)
                                         }
+                                        val displayItemTitle = LocalizedSeedMapper.mapChecklistItemTitle(
+                                            item.standardReference,
+                                            item.sequenceOrder,
+                                            item.itemTitle,
+                                            lang
+                                        )
                                         Surface(
                                             color = Color(0xFF111827),
                                             shape = RoundedCornerShape(8.dp),
@@ -707,7 +742,7 @@ fun RiskInspectionRoomPanel(
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp)) {
                                                 Text(
-                                                    text = "${item.sequenceOrder}. ${item.itemTitle}",
+                                                    text = "${item.sequenceOrder}. $displayItemTitle",
                                                     fontSize = 11.sp,
                                                     color = Color.White,
                                                     fontWeight = FontWeight.Medium
